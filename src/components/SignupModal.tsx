@@ -1,5 +1,12 @@
-import React, { useState } from "react";
-import { X, UserPlus, Plus, Trash2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  X,
+  UserPlus,
+  Plus,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 interface SignupModalProps {
   onClose: () => void;
@@ -25,6 +32,37 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
   ]);
   const [resume, setResume] = useState<File | null>(null);
   const [agreeTerms, setAgreeTerms] = useState(false);
+
+  // Image slider state
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const campusImages = ["/cutm1.jpg", "/cutm2.jpg", "/cutm3.jpg", "/cutm4.jpg"];
+
+  // Auto slide effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prevIndex) =>
+        prevIndex === campusImages.length - 1 ? 0 : prevIndex + 1
+      );
+    }, 5000); // Change image every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [campusImages.length]);
+
+  const goToNextSlide = () => {
+    setCurrentImageIndex((prevIndex) =>
+      prevIndex === campusImages.length - 1 ? 0 : prevIndex + 1
+    );
+  };
+
+  const goToPrevSlide = () => {
+    setCurrentImageIndex((prevIndex) =>
+      prevIndex === 0 ? campusImages.length - 1 : prevIndex - 1
+    );
+  };
+
+  const goToSlide = (index: number) => {
+    setCurrentImageIndex(index);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,21 +144,69 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 animate-fadeIn">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl overflow-hidden">
         <div className="flex h-full max-h-[90vh]">
-          {/* Left side - Image and Text */}
-          <div className="hidden md:flex md:w-1/2 relative">
-            <img
-              src="/api/placeholder/600/900"
-              alt="Campus"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-blue-900 bg-opacity-80 flex flex-col justify-center p-12">
-              <h2 className="text-4xl font-bold text-white mb-4">
-                Join Our Community
-              </h2>
-              <p className="text-white text-lg opacity-90">
-                Start your journey with Centurion University of Technology and
-                Management and shape your future.
-              </p>
+          {/* Left side - Image Slider and Text */}
+          <div className="hidden md:block md:w-1/2 relative">
+            {/* Image slider container */}
+            <div className="relative h-full w-full overflow-hidden">
+              {campusImages.map((img, index) => (
+                <div
+                  key={index}
+                  className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                    index === currentImageIndex ? "opacity-100" : "opacity-0"
+                  }`}
+                  style={{ zIndex: index === currentImageIndex ? 10 : 0 }}
+                >
+                  <img
+                    src={img}
+                    alt={`CUTM Campus ${index + 1}`}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-blue-900 bg-opacity-60"></div>
+                </div>
+              ))}
+
+              {/* Content overlay */}
+              <div className="absolute inset-0 z-20 flex flex-col justify-center p-12">
+                <h2 className="text-4xl font-bold text-white mb-4">
+                  Join Our Community
+                </h2>
+                <p className="text-white text-lg opacity-90 mb-8">
+                  Start your journey with Centurion University of Technology and
+                  Management and shape your future.
+                </p>
+
+                {/* Navigation arrows */}
+                <div className="absolute inset-x-0 bottom-20 flex justify-between px-6">
+                  <button
+                    onClick={goToPrevSlide}
+                    className="p-2 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 text-white transition-all"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                  <button
+                    onClick={goToNextSlide}
+                    className="p-2 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 text-white transition-all"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Indicators */}
+                <div className="absolute inset-x-0 bottom-10 flex justify-center space-x-2">
+                  {campusImages.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => goToSlide(index)}
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        index === currentImageIndex
+                          ? "w-8 bg-white"
+                          : "w-2 bg-white bg-opacity-50"
+                      }`}
+                      aria-label={`Go to slide ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -499,7 +585,7 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                       <path
                         fill="currentColor"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3mailto:28f69273-7825-4ce5-af65-034dd404ca6c@webapp.28-4.74 3.28-8.09z"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                       />
                       <path
                         fill="currentColor"
