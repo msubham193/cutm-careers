@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { X, LogIn } from "lucide-react";
+import axios from "axios";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { useUserStore } from "../store/userStore";
+import { BASE_URL, CAMPUSES } from "../utils/Constants";
 
 interface LoginModalProps {
   onClose: () => void;
@@ -7,10 +12,15 @@ interface LoginModalProps {
 }
 
 const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
+  const [isAdminLogin, setIsAdminLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [campus, setCampus] = useState(CAMPUSES[0]); // Default to first campus
   const [rememberMe, setRememberMe] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const { setUser } = useUserStore();
 
   const images = ["/cutm1.jpg", "/cutm2.jpg", "/cutm3.jpg", "/cutm4.jpg"];
 
@@ -18,18 +28,127 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % images.length);
-    }, 4000); // Change slide every 4 seconds
+    }, 4000);
     return () => clearInterval(interval);
   }, [images.length]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleRegularSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log({ email, password, rememberMe });
-    onClose();
+    setIsLoading(true);
+
+    try {
+      const response = await axios.post(`${BASE_URL}/user/login`, {
+        email,
+        password,
+      });
+
+      if (response.data.success === "ok" && response.data.response.user) {
+        const userData = {
+          id: response.data.response.user.id,
+          name: response.data.response.user.name,
+          email: response.data.response.user.email,
+          phoneNumber: response.data.response.user.phoneNumber,
+          role: response.data.response.user.role,
+          experience: response.data.response.user.exprience, // Handle API typo
+          createdAt: response.data.response.user.createdAt,
+          updatedAt: response.data.response.user.updatedAt,
+          campus: response.data.response.user.campus, // Optional
+        };
+
+        setUser(userData);
+        if (rememberMe) {
+          localStorage.setItem("user", JSON.stringify(userData));
+        }
+        localStorage.setItem("token", response.data.response.token);
+
+        toast.success("Successfully logged in!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+
+        onClose();
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to log in";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const response = await axios.post(`${BASE_URL}/user/admin-login`, {
+        name,
+        email,
+        password,
+        campus,
+      });
+
+      if (response.data.success === "ok" && response.data.response.user) {
+        const userData = {
+          id: response.data.response.user.id,
+          name: response.data.response.user.name,
+          email: response.data.response.user.email,
+          phoneNumber: response.data.response.user.phoneNumber,
+          role: response.data.response.user.role,
+          experience: response.data.response.user.exprience, // Handle API typo
+          createdAt: response.data.response.user.createdAt,
+          updatedAt: response.data.response.user.updatedAt,
+          campus: response.data.response.user.campus, // Include campus
+        };
+
+        setUser(userData);
+        if (rememberMe) {
+          localStorage.setItem("user", JSON.stringify(userData));
+        }
+        localStorage.setItem("token", response.data.response.token);
+
+        toast.success("Successfully logged in as admin!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+
+        onClose();
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to log in as admin";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleLogin = () => {
-    // Handle Google login logic here
     console.log("Google login clicked");
   };
 
@@ -37,13 +156,23 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
     setCurrentSlide(index);
   };
 
+  const toggleAdminLogin = () => {
+    setIsAdminLogin(!isAdminLogin);
+    // Reset form fields when switching
+    setEmail("");
+    setPassword("");
+    setName("");
+    setCampus(CAMPUSES[0]);
+    setRememberMe(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 animate-fadeIn">
+      <ToastContainer />
       <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl overflow-hidden">
         <div className="flex h-[600px]">
           {/* Left side - Image Slider and Text */}
           <div className="hidden md:block md:w-1/2 relative">
-            {/* Image Slider */}
             {images.map((src, index) => (
               <div
                 key={index}
@@ -58,8 +187,6 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
                 />
               </div>
             ))}
-
-            {/* Darkened Overlay */}
             <div className="absolute inset-0 bg-blue-900 bg-opacity-60 flex flex-col justify-center p-12">
               <h2 className="text-4xl font-bold text-white mb-4">
                 Welcome Back!
@@ -68,8 +195,6 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
                 Join Centurion University of Technology and Management and be
                 part of our mission to transform education.
               </p>
-
-              {/* Slider Indicators */}
               <div className="absolute bottom-8 left-0 right-0 flex justify-center space-x-2">
                 {images.map((_, index) => (
                   <button
@@ -90,7 +215,9 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
           {/* Right side - Login Form */}
           <div className="w-full md:w-1/2 p-8 flex flex-col justify-center">
             <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800">Login</h2>
+              <h2 className="text-3xl font-bold text-gray-800">
+                {isAdminLogin ? "Admin Login" : "Login"}
+              </h2>
               <button
                 onClick={onClose}
                 className="text-gray-500 hover:text-gray-700"
@@ -99,7 +226,31 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form
+              onSubmit={isAdminLogin ? handleAdminSubmit : handleRegularSubmit}
+              className="space-y-6"
+            >
+              {isAdminLogin && (
+                <div>
+                  <label
+                    htmlFor="name"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter your name"
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              )}
+
               <div>
                 <label
                   htmlFor="email"
@@ -115,6 +266,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter your email"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
@@ -133,8 +285,34 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter your password"
                   required
+                  disabled={isLoading}
                 />
               </div>
+
+              {isAdminLogin && (
+                <div>
+                  <label
+                    htmlFor="campus"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Campus
+                  </label>
+                  <select
+                    id="campus"
+                    value={campus}
+                    onChange={(e) => setCampus(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                    disabled={isLoading}
+                  >
+                    {CAMPUSES.map((campusOption) => (
+                      <option key={campusOption} value={campusOption}>
+                        {campusOption}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
@@ -144,6 +322,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    disabled={isLoading}
                   />
                   <label
                     htmlFor="remember-me"
@@ -162,10 +341,44 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
 
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center"
+                disabled={
+                  isLoading ||
+                  !email ||
+                  !password ||
+                  (isAdminLogin && (!name || !campus))
+                }
+                className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center ${
+                  isLoading ||
+                  !email ||
+                  !password ||
+                  (isAdminLogin && (!name || !campus))
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                }`}
               >
-                <LogIn className="w-5 h-5 mr-2" />
-                Sign In
+                {isLoading ? (
+                  <svg
+                    className="animate-spin h-5 w-5 mr-3 text-white"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v8z"
+                    />
+                  </svg>
+                ) : (
+                  <LogIn className="w-5 h-5 mr-2" />
+                )}
+                {isLoading ? "Processing..." : "Sign In"}
               </button>
 
               <div className="relative my-6">
@@ -182,7 +395,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-lg hover:bg-gray-50 transition duration-300 flex items-center justify-center"
+                disabled={isLoading}
+                className={`w-full bg-white border border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-lg hover:bg-gray-50 transition duration-300 flex items-center justify-center ${
+                  isLoading ? "opacity-50 cursor-not-allowed" : ""
+                }`}
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
@@ -207,13 +423,37 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
             </form>
 
             <p className="mt-6 text-center text-sm text-gray-600">
-              Don't have an account?{" "}
-              <button
-                onClick={onSignupClick}
-                className="font-medium text-blue-600 hover:text-blue-800 transition duration-300"
-              >
-                Sign up
-              </button>
+              {isAdminLogin ? (
+                <>
+                  Not an admin?{" "}
+                  <button
+                    onClick={toggleAdminLogin}
+                    className="font-medium text-blue-600 hover:text-blue-800 transition duration-300"
+                    disabled={isLoading}
+                  >
+                    Regular Login
+                  </button>
+                </>
+              ) : (
+                <>
+                  Don't have an account?{" "}
+                  <button
+                    onClick={onSignupClick}
+                    className="font-medium text-blue-600 hover:text-blue-800 transition duration-300"
+                    disabled={isLoading}
+                  >
+                    Sign up
+                  </button>{" "}
+                  |{" "}
+                  <button
+                    onClick={toggleAdminLogin}
+                    className="font-medium text-blue-600 hover:text-blue-800 transition duration-300"
+                    disabled={isLoading}
+                  >
+                    Admin Login
+                  </button>
+                </>
+              )}
             </p>
           </div>
         </div>

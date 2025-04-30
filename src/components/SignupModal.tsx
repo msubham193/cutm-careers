@@ -2,11 +2,18 @@ import React, { useState, useEffect } from "react";
 import {
   X,
   UserPlus,
-  Plus,
-  Trash2,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+import axios from "axios";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import EducationForm from "./EducationForm";
+import { useUserStore } from "../store/userStore";
+import { saveToLocalStorage, getFromLocalStorage } from "../utils/localStorage";
+import { BASE_URL } from "../utils/Constants";
 
 interface SignupModalProps {
   onClose: () => void;
@@ -20,33 +27,93 @@ interface Education {
   InstituteName: string;
 }
 
+interface FormData {
+  name: string;
+  email: string;
+  password: string;
+  phoneNumber: string;
+  experience: string;
+  education: Education[];
+  resume: File | null;
+  agreeTerms: boolean;
+}
+
 const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
   const [step, setStep] = useState(1);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [experience, setExperience] = useState("");
-  const [education, setEducation] = useState<Education[]>([
-    { educationName: "", timeLine: "", Percentage: "", InstituteName: "" },
-  ]);
-  const [resume, setResume] = useState<File | null>(null);
-  const [agreeTerms, setAgreeTerms] = useState(false);
-
-  // Image slider state
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const campusImages = ["/cutm1.jpg", "/cutm2.jpg", "/cutm3.jpg", "/cutm4.jpg"];
+  const { setUser } = useUserStore();
 
-  // Auto slide effect
+  const [formData, setFormData] = useState<FormData>({
+    name: "",
+    email: "",
+    password: "",
+    phoneNumber: "",
+    experience: "",
+    education: [
+      { educationName: "", timeLine: "", Percentage: "", InstituteName: "" },
+    ],
+    resume: null,
+    agreeTerms: false,
+  });
+
+  // Load form data from localStorage on mount
+  useEffect(() => {
+    const savedData = getFromLocalStorage<FormData>("signupForm");
+    if (savedData) {
+      setFormData(savedData);
+    }
+  }, []);
+
+  // Save form data to localStorage on change (1 hour TTL)
+  useEffect(() => {
+    saveToLocalStorage("signupForm", formData, 60 * 60 * 1000);
+  }, [formData]);
+
+  // Image slider auto-slide
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentImageIndex((prevIndex) =>
         prevIndex === campusImages.length - 1 ? 0 : prevIndex + 1
       );
-    }, 5000); // Change image every 5 seconds
-
+    }, 5000);
     return () => clearInterval(interval);
   }, [campusImages.length]);
+
+  const handleInputChange = (field: keyof FormData, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleEducationChange = (
+    index: number,
+    field: keyof Education,
+    value: string
+  ) => {
+    const newEducation = [...formData.education];
+    newEducation[index][field] = value;
+    handleInputChange("education", newEducation);
+  };
+
+  const handleAddEducation = () => {
+    handleInputChange("education", [
+      ...formData.education,
+      { educationName: "", timeLine: "", Percentage: "", InstituteName: "" },
+    ]);
+  };
+
+  const handleRemoveEducation = (index: number) => {
+    const newEducation = [...formData.education];
+    newEducation.splice(index, 1);
+    handleInputChange("education", newEducation);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleInputChange("resume", e.target.files[0]);
+    }
+  };
 
   const goToNextSlide = () => {
     setCurrentImageIndex((prevIndex) =>
@@ -64,52 +131,105 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
     setCurrentImageIndex(index);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const isPersonalInfoValid = () => {
+    return (
+      formData.name.trim() !== "" &&
+      formData.email.trim() !== "" &&
+      formData.password.trim() !== "" &&
+      formData.phoneNumber.trim() !== "" &&
+      formData.experience.trim() !== ""
+    );
+  };
+
+  const isEducationValid = () => {
+    return formData.education.every(
+      (edu) =>
+        edu.educationName.trim() !== "" &&
+        edu.timeLine.trim() !== "" &&
+        edu.Percentage.trim() !== "" &&
+        edu.InstituteName.trim() !== ""
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log({
-      name,
-      email,
-      password,
-      phoneNumber,
-      experience,
-      education,
-      resume,
-      agreeTerms,
-    });
-    onClose();
+    setIsLoading(true);
+
+    const data = new FormData();
+    if (formData.resume) {
+      data.append("resume", formData.resume);
+    }
+    data.append(
+      "basicInformation",
+      JSON.stringify({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        phoneNumber: formData.phoneNumber,
+        experience: formData.experience,
+      })
+    );
+    data.append("educationArray", JSON.stringify(formData.education));
+
+    try {
+      const response = await axios.post(`${BASE_URL}/user`, data, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // Check if the response indicates success
+      if (response.data.success === "ok" && response.data.response.user) {
+        const userData = {
+          id: response.data.response.user.id,
+          name: response.data.response.user.name,
+          email: response.data.response.user.email,
+          resumeUrl: response.data.response.user.resumeUrl,
+          phoneNumber: response.data.response.user.phoneNumber,
+          role: response.data.response.user.role,
+          experience: response.data.response.user.exprience, // Handle API typo
+          createdAt: response.data.response.user.createdAt,
+          updatedAt: response.data.response.user.updatedAt,
+        };
+
+        // Store user data in Zustand
+        setUser(userData);
+
+        // Save user data to localStorage (no TTL for user data)
+        localStorage.setItem("user", JSON.stringify(userData));
+
+        // Clear form data from localStorage
+        localStorage.removeItem("signupForm");
+
+        // Show success toast
+        toast.success("Successfully signed up!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+
+        onClose();
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to sign up";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleSignup = () => {
     console.log("Google signup clicked");
-  };
-
-  const handleAddEducation = () => {
-    setEducation([
-      ...education,
-      { educationName: "", timeLine: "", Percentage: "", InstituteName: "" },
-    ]);
-  };
-
-  const handleRemoveEducation = (index: number) => {
-    const newEducation = [...education];
-    newEducation.splice(index, 1);
-    setEducation(newEducation);
-  };
-
-  const handleEducationChange = (
-    index: number,
-    field: keyof Education,
-    value: string
-  ) => {
-    const newEducation = [...education];
-    newEducation[index][field] = value;
-    setEducation(newEducation);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setResume(e.target.files[0]);
-    }
   };
 
   const handleContinue = () => {
@@ -120,33 +240,13 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
     setStep(step - 1);
   };
 
-  const isPersonalInfoValid = () => {
-    return (
-      name.trim() !== "" &&
-      email.trim() !== "" &&
-      password.trim() !== "" &&
-      phoneNumber.trim() !== "" &&
-      experience.trim() !== ""
-    );
-  };
-
-  const isEducationValid = () => {
-    return education.every(
-      (edu) =>
-        edu.educationName.trim() !== "" &&
-        edu.timeLine.trim() !== "" &&
-        edu.Percentage.trim() !== "" &&
-        edu.InstituteName.trim() !== ""
-    );
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 animate-fadeIn">
+      <ToastContainer />
       <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl overflow-hidden">
         <div className="flex h-full max-h-[90vh]">
-          {/* Left side - Image Slider and Text */}
+          {/* Left side - Image Slider */}
           <div className="hidden md:block md:w-1/2 relative">
-            {/* Image slider container */}
             <div className="relative h-full w-full overflow-hidden">
               {campusImages.map((img, index) => (
                 <div
@@ -158,40 +258,33 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                 >
                   <img
                     src={img}
-                    alt={`CUTM Campus ${index + 1}`}
+                    alt={`Campus ${index + 1}`}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-blue-900 bg-opacity-60"></div>
                 </div>
               ))}
-
-              {/* Content overlay */}
               <div className="absolute inset-0 z-20 flex flex-col justify-center p-12">
                 <h2 className="text-4xl font-bold text-white mb-4">
                   Join Our Community
                 </h2>
                 <p className="text-white text-lg opacity-90 mb-8">
-                  Start your journey with Centurion University of Technology and
-                  Management and shape your future.
+                  Start your journey with Centurion University.
                 </p>
-
-                {/* Navigation arrows */}
                 <div className="absolute inset-x-0 bottom-20 flex justify-between px-6">
                   <button
                     onClick={goToPrevSlide}
-                    className="p-2 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 text-white transition-all"
+                    className="p-2 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 text-white"
                   >
                     <ChevronLeft className="w-6 h-6" />
                   </button>
                   <button
                     onClick={goToNextSlide}
-                    className="p-2 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 text-white transition-all"
+                    className="p-2 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 text-white"
                   >
                     <ChevronRight className="w-6 h-6" />
                   </button>
                 </div>
-
-                {/* Indicators */}
                 <div className="absolute inset-x-0 bottom-10 flex justify-center space-x-2">
                   {campusImages.map((_, index) => (
                     <button
@@ -228,7 +321,7 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
               {/* Step Indicator */}
               <div className="flex justify-between mb-4 text-sm">
                 <div
-                  className={`flex-1 text-center  ${
+                  className={`flex-1 text-center ${
                     step === 1 ? "text-blue-600 font-semibold" : "text-gray-500"
                   }`}
                 >
@@ -266,14 +359,15 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     <input
                       type="text"
                       id="name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      value={formData.name}
+                      onChange={(e) =>
+                        handleInputChange("name", e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter your full name"
                       required
                     />
                   </div>
-
                   <div>
                     <label
                       htmlFor="email"
@@ -284,15 +378,16 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     <input
                       type="email"
                       id="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={formData.email}
+                      onChange={(e) =>
+                        handleInputChange("email", e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter your email"
                       required
                     />
                   </div>
-
-                  <div>
+                  <div className="relative">
                     <label
                       htmlFor="password"
                       className="block text-sm font-medium text-gray-700 mb-1"
@@ -300,16 +395,28 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                       Password
                     </label>
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       id="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      value={formData.password}
+                      onChange={(e) =>
+                        handleInputChange("password", e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Create a password"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
                   </div>
-
                   <div>
                     <label
                       htmlFor="phoneNumber"
@@ -320,14 +427,15 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     <input
                       type="tel"
                       id="phoneNumber"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      value={formData.phoneNumber}
+                      onChange={(e) =>
+                        handleInputChange("phoneNumber", e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter your phone number"
                       required
                     />
                   </div>
-
                   <div>
                     <label
                       htmlFor="experience"
@@ -337,15 +445,16 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     </label>
                     <textarea
                       id="experience"
-                      value={experience}
-                      onChange={(e) => setExperience(e.target.value)}
+                      value={formData.experience}
+                      onChange={(e) =>
+                        handleInputChange("experience", e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                       placeholder="Describe your experience"
                       rows={2}
                       required
                     />
                   </div>
-
                   <button
                     type="button"
                     onClick={handleContinue}
@@ -364,117 +473,12 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
               {/* Step 2: Education */}
               {step === 2 && (
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-gray-800">
-                      Education
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={handleAddEducation}
-                      className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
-                    >
-                      <Plus className="w-4 h-4 mr-1" /> Add Education
-                    </button>
-                  </div>
-
-                  {education.map((edu, index) => (
-                    <div
-                      key={index}
-                      className="p-3 border border-gray-200 rounded-lg space-y-2"
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-700">
-                          Education #{index + 1}
-                        </span>
-                        {education.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEducation(index)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Degree/Qualification
-                        </label>
-                        <input
-                          type="text"
-                          value={edu.educationName}
-                          onChange={(e) =>
-                            handleEducationChange(
-                              index,
-                              "educationName",
-                              e.target.value
-                            )
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., B.Tech Computer Science"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Timeline
-                        </label>
-                        <input
-                          type="text"
-                          value={edu.timeLine}
-                          onChange={(e) =>
-                            handleEducationChange(
-                              index,
-                              "timeLine",
-                              e.target.value
-                            )
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., 2018-2022"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Percentage/CGPA
-                        </label>
-                        <input
-                          type="text"
-                          value={edu.Percentage}
-                          onChange={(e) =>
-                            handleEducationChange(
-                              index,
-                              "Percentage",
-                              e.target.value
-                            )
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., 85%"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Institute Name
-                        </label>
-                        <input
-                          type="text"
-                          value={edu.InstituteName}
-                          onChange={(e) =>
-                            handleEducationChange(
-                              index,
-                              "InstituteName",
-                              e.target.value
-                            )
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="e.g., XYZ University"
-                          required
-                        />
-                      </div>
-                    </div>
-                  ))}
-
+                  <EducationForm
+                    education={formData.education}
+                    onChange={handleEducationChange}
+                    onAdd={handleAddEducation}
+                    onRemove={handleRemoveEducation}
+                  />
                   <div className="flex space-x-4">
                     <button
                       type="button"
@@ -510,8 +514,8 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                       <label className="flex flex-col items-center justify-center cursor-pointer">
                         <div className="flex flex-col items-center justify-center text-center">
                           <p className="text-sm text-gray-600">
-                            {resume
-                              ? resume.name
+                            {formData.resume
+                              ? formData.resume.name
                               : "Upload your resume (PDF format)"}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
@@ -528,13 +532,14 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                       </label>
                     </div>
                   </div>
-
                   <div className="flex items-start">
                     <input
                       type="checkbox"
                       id="agree-terms"
-                      checked={agreeTerms}
-                      onChange={(e) => setAgreeTerms(e.target.checked)}
+                      checked={formData.agreeTerms}
+                      onChange={(e) =>
+                        handleInputChange("agreeTerms", e.target.checked)
+                      }
                       className="h-4 w-4 mt-1 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       required
                     />
@@ -552,20 +557,41 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                       </a>
                     </label>
                   </div>
-
                   <button
                     type="submit"
-                    disabled={!resume || !agreeTerms}
+                    disabled={
+                      !formData.resume || !formData.agreeTerms || isLoading
+                    }
                     className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-lg transition duration-300 flex items-center justify-center mt-4 ${
-                      !resume || !agreeTerms
+                      !formData.resume || !formData.agreeTerms || isLoading
                         ? "opacity-50 cursor-not-allowed"
                         : ""
                     }`}
                   >
-                    <UserPlus className="w-5 h-5 mr-2" />
-                    Create Account
+                    {isLoading ? (
+                      <svg
+                        className="animate-spin h-5 w-5 mr-3 text-white"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8z"
+                        />
+                      </svg>
+                    ) : (
+                      <UserPlus className="w-5 h-5 mr-2" />
+                    )}
+                    {isLoading ? "Processing..." : "Create Account"}
                   </button>
-
                   <div className="relative my-4">
                     <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-gray-300"></div>
@@ -576,7 +602,6 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                       </span>
                     </div>
                   </div>
-
                   <button
                     type="button"
                     onClick={handleGoogleSignup}
@@ -602,7 +627,6 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     </svg>
                     Continue with Google
                   </button>
-
                   <div className="flex space-x-4 mt-4">
                     <button
                       type="button"

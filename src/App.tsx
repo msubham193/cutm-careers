@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -23,10 +23,16 @@ import ApplicationDetail from "./components/admin/pages/applications/Application
 import Interviews from "./components/admin/pages/interviews/Interviews";
 import Dashboard from "./components/admin/pages/Dashboard";
 import AdminRoot from "./components/admin/pages/AdminRoot";
+import { useUserStore } from "./store/userStore";
 
 function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const { loadUserFromStorage } = useUserStore();
+
+  useEffect(() => {
+    loadUserFromStorage();
+  }, [loadUserFromStorage]);
 
   const toggleLoginModal = () => setIsLoginOpen(!isLoginOpen);
   const toggleSignupModal = () => setIsSignupOpen(!isSignupOpen);
@@ -250,14 +256,7 @@ function App() {
           <Route path="/job/:id" element={<JobDetails />} />
 
           {/* Admin Routes - All protected with the Layout component */}
-          <Route
-            path="/admin"
-            element={
-              // <ProtectedRoute>
-              <Layout />
-              // </ProtectedRoute>
-            }
-          >
+          <Route path="/admin" element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="jobs" element={<Jobs />} />
             <Route path="jobs/create" element={<JobForm />} />

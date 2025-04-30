@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Search, Filter, ChevronDown } from "lucide-react";
 import JobCard from "./JobCard";
+import { useUserStore } from "../store/userStore";
 
 const JobsPage = () => {
   // Sample jobs data from your provided jobListings
+  const { user, clearUser } = useUserStore();
+
   const allJobs = [
     {
       id: 1,
@@ -299,19 +302,33 @@ const JobsPage = () => {
         )}
 
         {/* Call to Action */}
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 md:p-8 flex flex-col md:flex-row items-center justify-between">
-          <div className="mb-4 md:mb-0 text-center md:text-left">
+        {user?.role === "admin" ? (
+          <div className="mb-8 text-center">
             <h3 className="text-xl font-bold text-gray-800 mb-2">
-              Don't see a position that matches your skills?
+              Are you an admin?
             </h3>
-            <p className="text-gray-600">
-              Submit your resume for future opportunities
+            <p className="text-gray-600 mb-4">
+              You can add new job listings or manage existing ones
             </p>
+            <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md transition duration-300">
+              Manage Job Listings
+            </button>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md transition duration-300">
-            Submit Resume
-          </button>
-        </div>
+        ) : (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 md:p-8 flex flex-col md:flex-row items-center justify-between">
+            <div className="mb-4 md:mb-0 text-center md:text-left">
+              <h3 className="text-xl font-bold text-gray-800 mb-2">
+                Don't see a position that matches your skills?
+              </h3>
+              <p className="text-gray-600">
+                Submit your resume for future opportunities
+              </p>
+            </div>
+            <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md transition duration-300">
+              Submit Resume
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
