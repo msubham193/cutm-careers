@@ -1,5 +1,10 @@
 import React, { useState } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import Navbar from "./components/Navbar";
 import JobCard from "./components/JobCard";
@@ -8,6 +13,16 @@ import JobsPage from "./components/JobsPage";
 import Footer from "./components/Footer";
 import LoginModal from "./components/LoginModal";
 import SignupModal from "./components/SignupModal";
+import AdminPanel from "./components/AdminPanel";
+import Layout from "./components/admin/layout/Layout";
+import Jobs from "./components/admin/pages/jobs/Jobs";
+import JobForm from "./components/admin/pages/jobs/JobForm";
+import JobDetail from "./components/admin/pages/jobs/JobDetail";
+import Applications from "./components/admin/pages/applications/Applications";
+import ApplicationDetail from "./components/admin/pages/applications/ApplicationDetail";
+import Interviews from "./components/admin/pages/interviews/Interviews";
+import Dashboard from "./components/admin/pages/Dashboard";
+import AdminRoot from "./components/admin/pages/AdminRoot";
 
 function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -228,11 +243,46 @@ function App() {
           onLoginClick={toggleLoginModal}
           onSignupClick={toggleSignupModal}
         />
-
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/job/:id" element={<JobDetails />} />
+
+          {/* Admin Routes - All protected with the Layout component */}
+          <Route
+            path="/admin"
+            element={
+              // <ProtectedRoute>
+              <Layout />
+              // </ProtectedRoute>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="jobs" element={<Jobs />} />
+            <Route path="jobs/create" element={<JobForm />} />
+            <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="jobs/:id/edit" element={<JobForm />} />
+
+            {/* Application Routes */}
+            <Route path="applications" element={<Applications />} />
+            <Route path="applications/:id" element={<ApplicationDetail />} />
+
+            {/* Interview Routes */}
+            <Route path="interviews" element={<Interviews />} />
+
+            {/* Settings Route */}
+            <Route
+              path="settings"
+              element={<div className="p-4">Settings Page</div>}
+            />
+
+            {/* Fallback route for admin section */}
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Route>
+
+          {/* Global fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
 
         <Footer />
