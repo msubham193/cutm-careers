@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Briefcase,
@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Activity,
 } from "lucide-react";
+import { useUserStore } from "../../../store/userStore";
+import { toast } from "react-toastify";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -18,6 +20,8 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { clearUser } = useUserStore();
 
   const menuItems = [
     {
@@ -54,6 +58,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
       icon: <Settings className="w-5 h-5" />,
     },
   ];
+
+  const handleLogout = () => {
+    // Clear localStorage
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+
+    // Reset user store
+    clearUser();
+
+    // Show toast notification
+    toast.success("Logged out successfully!", {
+      position: "top-right",
+      autoClose: 3000,
+    });
+
+    // Navigate to home
+    navigate("/");
+  };
 
   return (
     <>
@@ -104,11 +126,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                     <span className="mr-3">{item.icon}</span>
                     <span>{item.name}</span>
                   </div>
-                  {item.badge && (
+                  {/* {item.badge && (
                     <span className="px-2 py-1 text-xs font-medium bg-white/20 rounded-full">
                       {item.badge}
                     </span>
-                  )}
+                  )} */}
                 </Link>
               </li>
             ))}
@@ -117,7 +139,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
 
         {/* Footer */}
         <div className="absolute bottom-0 w-full border-t border-blue-800/50">
-          <button className="flex items-center w-full px-6 py-4 text-sm text-blue-100 hover:bg-white/5 hover:text-white transition-colors">
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full px-6 py-4 text-sm text-blue-100 hover:bg-white/5 hover:text-white transition-colors"
+          >
             <LogOut className="w-5 h-5 mr-3" />
             <span>Logout</span>
           </button>

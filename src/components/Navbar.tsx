@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Menu, X, User, LogOut, LogIn, ChevronDown } from "lucide-react";
 import { useUserStore } from "../store/userStore";
+import { useNavigate } from "react-router-dom";
 
 interface NavbarProps {
   onLoginClick: () => void;
@@ -13,7 +14,7 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const { user, clearUser } = useUserStore();
 
-  console.log(user);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -30,7 +31,7 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
-    setIsProfileDropdownOpen(false); // Close profile dropdown when toggling mobile menu
+    setIsProfileDropdownOpen(false);
   };
 
   const toggleProfileDropdown = () => {
@@ -42,6 +43,13 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
     localStorage.removeItem("user");
     setIsProfileDropdownOpen(false);
     setIsMobileMenuOpen(false);
+
+    navigate("/");
+  };
+
+  const handleSignupClick = () => {
+    console.log("Sign Up button clicked"); // Debug log
+    onSignupClick();
   };
 
   return (
@@ -143,6 +151,14 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
                       <p className="font-medium">{user.name}</p>
                       <p className="text-xs text-gray-500">{user.email}</p>
                     </div>
+                    {user.role === "USER" && (
+                      <a
+                        href={`/my-applications/${user.id}`}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        My Applications
+                      </a>
+                    )}
                     {user.role === "ADMIN" && (
                       <a
                         href="/admin"
@@ -174,7 +190,7 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
                   <LogIn className="w-4 h-4 mr-1" /> Login
                 </button>
                 <button
-                  onClick={onSignupClick}
+                  onClick={handleSignupClick}
                   className={`px-4 py-2 rounded-md font-medium ${
                     isScrolled
                       ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -238,6 +254,14 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
                     <p className="font-medium">{user.name}</p>
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
+                  {user.role === "USER" && (
+                    <a
+                      href="/my-applications"
+                      className="block py-2 text-sm text-gray-700 hover:text-blue-600"
+                    >
+                      My Applications
+                    </a>
+                  )}
                   {user.role === "ADMIN" && (
                     <a
                       href="/admin"
@@ -263,7 +287,7 @@ const Navbar: React.FC<NavbarProps> = ({ onLoginClick, onSignupClick }) => {
                     <LogIn className="w-4 h-4 mr-2" /> Login
                   </button>
                   <button
-                    onClick={onSignupClick}
+                    onClick={handleSignupClick}
                     className="w-full flex justify-center items-center py-2 bg-blue-600 rounded-md font-medium text-white hover:bg-blue-700 transition duration-300"
                   >
                     <User className="w-4 h-4 mr-2" /> Sign Up

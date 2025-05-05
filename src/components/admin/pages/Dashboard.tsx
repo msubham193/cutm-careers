@@ -1,15 +1,114 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardBody } from "../ui/Card";
 import { Table, TableHead, TableBody, TableRow, TableCell } from "../ui/Table";
+import Button from "../ui/Button";
 import Badge from "../ui/Badge";
 import { BarChart, TrendingUp, Briefcase, Users, Calendar } from "lucide-react";
+import { dashboardMetrics } from "../../../data/mockData";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { useUserStore } from "../../../store/userStore";
+import { BASE_URL } from "../../../utils/Constants";
 import {
-  dashboardMetrics,
-  getJobApplicationsWithDetails,
-} from "../../../data/mockData";
+  JobApplicationWithDetails,
+  ApplicationStatus,
+} from "../../../utils/types";
 
 const Dashboard: React.FC = () => {
-  const recentApplications = getJobApplicationsWithDetails().slice(0, 5);
+  const [applications, setApplications] = useState<JobApplicationWithDetails[]>(
+    []
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useUserStore();
+
+  // Fetch applications from backend
+  const fetchApplications = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.get(`${BASE_URL}/application`, {
+        headers: {
+          "x-access-token": token,
+        },
+      });
+
+      if (
+        response.data.success === "ok" &&
+        Array.isArray(response.data.response)
+      ) {
+        // Sort by appliedAt (newest first)
+        const sortedApplications = response.data.response.sort(
+          (a: JobApplicationWithDetails, b: JobApplicationWithDetails) =>
+            new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime()
+        );
+        setApplications(sortedApplications);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to fetch applications";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+        if (error.response.status === 401) {
+          errorMessage = "Unauthorized. Please log in again.";
+        }
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch applications on mount
+  useEffect(() => {
+    fetchApplications();
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div className="text-center p-8">
+        <svg
+          className="animate-spin h-8 w-8 text-blue-600 mx-auto"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8v8z"
+          />
+        </svg>
+        <p className="mt-2 text-gray-600">Loading applications...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <h2 className="text-xl text-red-600 mb-4">{error}</h2>
+        <Button onClick={fetchApplications}>Retry</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -44,58 +143,75 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* Recent Applications */}
+      {/* All Applications */}
       <Card>
         <CardHeader>
           <h2 className="text-lg font-semibold text-gray-800">
-            Recent Applications
+            All Applications
           </h2>
         </CardHeader>
         <CardBody className="p-0">
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell header>Applicant</TableCell>
-                <TableCell header>Job</TableCell>
-                <TableCell header>Status</TableCell>
-                <TableCell header>Date</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {recentApplications.map((application) => (
-                <TableRow key={application.id}>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <div className="ml-2">
-                        <div className="font-medium text-gray-900">
-                          {application.applicantName}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {application.applicantEmail}
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium text-gray-900">
-                      {application.job.title}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {application.job.campus}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge type="application" status={application.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm text-gray-500">
-                      {new Date(application.createdAt).toLocaleDateString()}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <div className="max-h-[500px] overflow-y-auto">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell header>Applicant</TableCell>
+                    <TableCell header>Job</TableCell>
+                    <TableCell header>Status</TableCell>
+                    <TableCell header>Applied On</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {applications.length > 0 ? (
+                    applications.map((application) => (
+                      <TableRow key={application.id}>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <div className="ml-2">
+                              <div className="font-medium text-gray-900">
+                                {application.user.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {application.user.email}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-gray-900">
+                            {application.job.title}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {application.job.campus}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            type="application"
+                            status={application.status}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-gray-500">
+                            {new Date(
+                              application.appliedAt
+                            ).toLocaleDateString()}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-6">
+                        <p className="text-gray-500">No applications found</p>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </CardBody>
       </Card>
 

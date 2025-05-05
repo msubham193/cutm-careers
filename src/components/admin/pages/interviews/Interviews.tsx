@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardBody } from "../../ui/Card";
 import {
@@ -11,12 +11,16 @@ import {
 import Button from "../../ui/Button";
 import Badge from "../../ui/Badge";
 import { Filter, Calendar, Search } from "lucide-react";
-import { interviews, jobApplications, jobs } from "../../../../data/mockData";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { useUserStore } from "../../../../store/userStore";
+import { BASE_URL } from "../../../../utils/Constants";
 import {
   InterviewStatus,
   ModeOfInterview,
   Job,
   JobApplication,
+  Interview,
 } from "../../../../utils/types";
 
 interface InterviewWithDetails {
@@ -31,7 +35,7 @@ interface InterviewWithDetails {
   interviewResult?: string;
   createdAt: string;
   updatedAt: string;
-  application: JobApplication;
+  jobApplication: JobApplication;
   job: Job;
 }
 
@@ -39,27 +43,116 @@ const Interviews: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<InterviewStatus | "">("");
   const [filterMode, setFilterMode] = useState<ModeOfInterview | "">("");
+  const [interviews, setInterviews] = useState<InterviewWithDetails[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useUserStore();
 
-  // Get interviews with application and job details
-  const interviewsWithDetails: InterviewWithDetails[] = interviews.map(
-    (interview) => {
-      const application = jobApplications.find(
-        (app) => app.id === interview.jobApplicationId
-      )!;
-      const job = jobs.find((j) => j.id === application.jobId)!;
+  // Fetch interviews and job details
+  const fetchInterviews = async () => {
+    setIsLoading(true);
+    setError(null);
 
-      return {
-        ...interview,
-        application,
-        job,
-      };
+    try {
+      const response = await axios.get(
+        `${BASE_URL}/application/interview/schedule`,
+        {
+          headers: { "x-access-token": token },
+        }
+      );
+
+      console.log(response.data.response);
+      if (
+        response.data.message === "ok" &&
+        Array.isArray(response.data.response)
+      ) {
+        const interviewsData: Interview[] = response.data.response;
+
+        // Fetch job details for each interview
+        const interviewsWithDetails: InterviewWithDetails[] = await Promise.all(
+          interviewsData.map(async (interview) => {
+            try {
+              const jobResponse = await axios.get(
+                `${BASE_URL}/job/${interview.jobApplication.jobId}`
+              );
+              if (
+                jobResponse.data.success === "ok" &&
+                jobResponse.data.response
+              ) {
+                return {
+                  ...interview,
+                  jobApplication: {
+                    ...interview.jobApplication,
+                    applicantName: "Unknown Applicant", // API doesn't provide name
+                    applicantEmail: "unknown@example.com", // API doesn't provide email
+                  },
+                  job: jobResponse.data.response,
+                };
+              } else {
+                throw new Error("Unexpected job response format");
+              }
+            } catch (jobError) {
+              console.error(
+                `Failed to fetch job ${interview.jobApplication.jobId}:`,
+                jobError
+              );
+              return {
+                ...interview,
+                jobApplication: {
+                  ...interview.jobApplication,
+                  applicantName: "Unknown Applicant",
+                  applicantEmail: "unknown@example.com",
+                },
+                job: {
+                  id: interview.jobApplication.jobId,
+                  title: "Unknown Job",
+                  campus: "Unknown Campus",
+                  description: "",
+                  companyName: "",
+                  jobType: JobType.FULL_TIME,
+                  status: JobStatus.ACTIVE,
+                  adminId: 0,
+                  Qualification: "",
+                  department: "",
+                  applicationDeadline: new Date().toISOString(),
+                },
+              };
+            }
+          })
+        );
+
+        setInterviews(interviewsWithDetails);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to fetch interviews";
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setIsLoading(false);
     }
-  );
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchInterviews();
+    } else {
+      setError("Please log in to view interviews");
+      setIsLoading(false);
+    }
+  }, [token]);
 
   // Filter interviews
-  const filteredInterviews = interviewsWithDetails.filter((interview) => {
+  const filteredInterviews = interviews.filter((interview) => {
     const matchesSearch =
-      interview.application.applicantName
+      interview.jobApplication.applicantName
         .toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
       interview.job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -77,6 +170,25 @@ const Interviews: React.FC = () => {
 
     return matchesSearch && matchesStatus && matchesMode;
   });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">{error}</p>
+        <Button onClick={fetchInterviews} variant="primary">
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -171,10 +283,10 @@ const Interviews: React.FC = () => {
                 <TableRow key={interview.id}>
                   <TableCell>
                     <div className="font-medium text-gray-900">
-                      {interview.application.applicantName}
+                      {interview.jobApplication.applicantName}
                     </div>
                     <div className="text-sm text-gray-500">
-                      {interview.application.applicantEmail}
+                      {interview.jobApplication.applicantEmail}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -218,7 +330,9 @@ const Interviews: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
-                      <Link to={`/admin/applications/${interview.jobApplicationId}`}>
+                      <Link
+                        to={`/admin/applications/${interview.jobApplicationId}`}
+                      >
                         <Button variant="outline" size="sm">
                           View
                         </Button>

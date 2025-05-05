@@ -1,42 +1,174 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { Card, CardHeader, CardBody } from "../../ui/Card";
 import Button from "../../ui/Button";
 import Badge from "../../ui/Badge";
-import { jobs, jobApplications } from "../../../../data/mockData";
-import { Job, JobApplication } from "../../../../utils/types";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { useUserStore } from "../../../../store/userStore";
+import { BASE_URL } from "../../../../utils/Constants";
+import { Job, JobStatus } from "../../../../utils/types";
+export interface JobApplication {
+  id: string;
+  status: string;
+  createdAt: string;
+  user: {
+    name: string;
+    email: string;
+    createdAt: string;
+  };
+  // other properties
+}
 
 const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { token } = useUserStore();
 
-  const [job, setJob] = useState<Job | null>(null);
+  const [job, setJob] = useState<Job | null>(location.state?.job || null);
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Simulate API fetch
-    setTimeout(() => {
-      if (id) {
-        const foundJob = jobs.find((j) => j.id === parseInt(id));
-        if (foundJob) {
-          setJob(foundJob);
+  // Fetch job and applications
+  const fetchJobData = async () => {
+    setLoading(true);
+    setError(null);
 
-          // Get applications for this job
-          const jobApps = jobApplications.filter(
-            (app) => app.jobId === parseInt(id)
-          );
-          setApplications(jobApps);
-        } else {
-          setError("Job not found");
-        }
+    try {
+      const response = await axios.get(`${BASE_URL}/job/applicants/${id}`, {});
+
+      if (response.data.success === "ok" && response.data.response) {
+        const { JobApplication, ...jobData } = response.data.response;
+        setJob(jobData);
+        console.log(JobApplication);
+        setApplications(JobApplication || []);
+      } else {
+        throw new Error("Unexpected response format");
       }
+    } catch (error: any) {
+      let errorMessage = "Failed to fetch job details";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+        if (error.response.status === 401) {
+          errorMessage = "Unauthorized. Please log in again.";
+        } else if (error.response.status === 404) {
+          errorMessage = "Job not found";
+        }
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
       setLoading(false);
-    }, 500);
-  }, [id]);
+    }
+  };
 
-  if (loading) {
+  // Handle job status update (Close/Reopen)
+  const handleStatusUpdate = async () => {
+    if (!job || !token) return;
+
+    const newStatus =
+      job.status === JobStatus.ACTIVE ? JobStatus.CLOSED : JobStatus.ACTIVE;
+
+    try {
+      setLoading(true);
+      const response = await axios.put(
+        `${BASE_URL}/api/job/${id}`,
+        { status: newStatus },
+        {
+          headers: { "x-access-token": token },
+        }
+      );
+
+      if (response.data.success === "ok" && response.data.response) {
+        setJob({ ...job, status: newStatus });
+        toast.success(
+          `Job ${
+            newStatus === JobStatus.ACTIVE ? "reopened" : "closed"
+          } successfully!`,
+          {
+            position: "top-right",
+            autoClose: 3000,
+          }
+        );
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = `Failed to ${
+        newStatus === JobStatus.ACTIVE ? "reopen" : "close"
+      } job`;
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle job deletion
+  const handleDeleteJob = async () => {
+    if (!job || !token) return;
+
+    if (!window.confirm("Are you sure you want to delete this job?")) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.delete(`${BASE_URL}/api/job/${id}`, {
+        headers: { "x-access-token": token },
+      });
+
+      if (response.data.success === "ok") {
+        toast.success("Job deleted successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        navigate("/admin/jobs");
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to delete job";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobData();
+  }, [id, token]);
+
+  if (loading && !job) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900"></div>
@@ -157,14 +289,18 @@ const JobDetail: React.FC = () => {
                       <div className="flex justify-between items-start">
                         <div>
                           <h3 className="font-medium text-gray-900">
-                            {app.applicantName}
+                            {app.user.name}
                           </h3>
                           <p className="text-sm text-gray-500">
-                            {app.applicantEmail}
+                            {app.user.email}
                           </p>
                           <p className="text-sm text-gray-500 mt-1">
                             Applied on{" "}
-                            {new Date(app.createdAt).toLocaleDateString()}
+                            {app.user.createdAt
+                              ? new Date(
+                                  app.user.createdAt
+                                ).toLocaleDateString()
+                              : "N/A"}
                           </p>
                         </div>
                         <div>
@@ -229,11 +365,22 @@ const JobDetail: React.FC = () => {
                 <div className="mt-6 space-y-3">
                   <Button
                     className="w-full"
-                    variant={job.status === "ACTIVE" ? "warning" : "success"}
+                    variant={
+                      job.status === JobStatus.ACTIVE ? "warning" : "success"
+                    }
+                    onClick={handleStatusUpdate}
+                    disabled={loading}
                   >
-                    {job.status === "ACTIVE" ? "Close Job" : "Reopen Job"}
+                    {job.status === JobStatus.ACTIVE
+                      ? "Close Job"
+                      : "Reopen Job"}
                   </Button>
-                  <Button className="w-full" variant="danger">
+                  <Button
+                    className="w-full"
+                    variant="danger"
+                    onClick={handleDeleteJob}
+                    disabled={loading}
+                  >
                     Delete Job
                   </Button>
                 </div>

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardBody } from "../../ui/Card";
 import {
   Table,
@@ -11,26 +11,120 @@ import {
 import Button from "../../ui/Button";
 import Badge from "../../ui/Badge";
 import { Filter, Search, Download } from "lucide-react";
-import { getJobApplicationsWithDetails } from "../../../../data/mockData";
-import { ApplicationStatus } from "../../../../utils/types";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { useUserStore } from "../../../../store/userStore";
+import { BASE_URL } from "../../../../utils/Constants";
+import {
+  ApplicationStatus,
+  JobApplicationWithDetails,
+} from "../../../../utils/types";
 
 const Applications: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<ApplicationStatus | "">("");
+  const [applications, setApplications] = useState<JobApplicationWithDetails[]>(
+    []
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { token } = useUserStore();
+  const navigate = useNavigate();
 
-  const applicationsWithDetails = getJobApplicationsWithDetails();
+  // Fetch applications from backend
+  const fetchApplications = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.get(`${BASE_URL}/application`, {
+        headers: {
+          "x-access-token": token,
+        },
+      });
+
+      if (
+        response.data.success === "ok" &&
+        Array.isArray(response.data.response)
+      ) {
+        setApplications(response.data.response);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to fetch applications";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+        if (error.response.status === 401) {
+          errorMessage = "Unauthorized. Please log in again.";
+        }
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch applications on mount
+  useEffect(() => {
+    fetchApplications();
+  }, [token, navigate]);
 
   // Filter applications based on search term and status filter
-  const filteredApplications = applicationsWithDetails.filter((app) => {
+  const filteredApplications = applications.filter((app) => {
     const matchesSearch =
-      app.applicantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.applicantEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.job.title.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = filterStatus ? app.status === filterStatus : true;
 
     return matchesSearch && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="text-center p-8">
+        <svg
+          className="animate-spin h-8 w-8 text-blue-600 mx-auto"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8v8z"
+          />
+        </svg>
+        <p className="mt-2 text-gray-600">Loading applications...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <h2 className="text-xl text-red-600 mb-4">{error}</h2>
+        <Button onClick={fetchApplications}>Retry</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -55,6 +149,7 @@ const Applications: React.FC = () => {
                 placeholder="Search applications..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={loading}
               />
             </div>
 
@@ -65,6 +160,7 @@ const Applications: React.FC = () => {
                 onChange={(e) =>
                   setFilterStatus(e.target.value as ApplicationStatus | "")
                 }
+                disabled={loading}
               >
                 <option value="">All Statuses</option>
                 {Object.values(ApplicationStatus).map((status) => (
@@ -84,62 +180,68 @@ const Applications: React.FC = () => {
       {/* Applications Table */}
       <Card>
         <CardBody className="p-0">
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell header>Applicant</TableCell>
-                <TableCell header>Job</TableCell>
-                <TableCell header>Campus</TableCell>
-                <TableCell header>Status</TableCell>
-                <TableCell header>Applied On</TableCell>
-                <TableCell header>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredApplications.map((application) => (
-                <TableRow key={application.id}>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {application.applicantName}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {application.applicantEmail}
+          {filteredApplications.length === 0 ? (
+            <div className="text-center p-8">
+              <p className="text-gray-600">No applications found.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell header>Applicant</TableCell>
+                  <TableCell header>Job</TableCell>
+                  <TableCell header>Campus</TableCell>
+                  <TableCell header>Status</TableCell>
+                  <TableCell header>Applied On</TableCell>
+                  <TableCell header>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredApplications.map((application) => (
+                  <TableRow key={application.id}>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {application.user.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {application.user.email}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium text-gray-900">
-                      {application.job.title}
-                    </div>
-                  </TableCell>
-                  <TableCell>{application.job.campus}</TableCell>
-                  <TableCell>
-                    <Badge type="application" status={application.status} />
-                  </TableCell>
-                  <TableCell>
-                    {new Date(application.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Link to={`/admin/applications/${application.id}`}>
-                        <Button variant="outline" size="sm">
-                          View
-                        </Button>
-                      </Link>
-                      {application.status === ApplicationStatus.PENDING && (
-                        <Button variant="primary" size="sm">
-                          Review
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium text-gray-900">
+                        {application.job.title}
+                      </div>
+                    </TableCell>
+                    <TableCell>{application.job.campus}</TableCell>
+                    <TableCell>
+                      <Badge type="application" status={application.status} />
+                    </TableCell>
+                    <TableCell>
+                      {new Date(application.appliedAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Link to={`/admin/applications/${application.id}`}>
+                          <Button variant="outline" size="sm">
+                            View
+                          </Button>
+                        </Link>
+                        {application.status === ApplicationStatus.PENDING && (
+                          <Button variant="primary" size="sm">
+                            Review
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardBody>
       </Card>
     </div>

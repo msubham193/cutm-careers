@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Bell, Search, Menu, Sun, Moon } from 'lucide-react';
+import React, { useState } from "react";
+import { Bell, Search, Menu, Sun, Moon } from "lucide-react";
+import { useUserStore } from "../../../store/userStore";
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -8,11 +9,29 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const [isDark, setIsDark] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const { user } = useUserStore();
+
+  console.log(user);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
     // Theme implementation would go here
   };
+
+  // Derive initials from name or fallback to 'AD'
+  const getInitials = (name: string | undefined) => {
+    if (!name) return "AD";
+    const names = name.trim().split(" ");
+    const initials = names
+      .map((n) => n.charAt(0).toUpperCase())
+      .join("")
+      .slice(0, 2);
+    return initials || "AD";
+  };
+
+  // Fallback values for display
+  const displayName = user?.name || "Admin";
+  const displayRole = user?.role || user?.email || "Administrator";
 
   return (
     <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-20">
@@ -24,10 +43,17 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           >
             <Menu className="w-6 h-6" />
           </button>
-          
-          <h1 className="ml-4 text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-900 to-blue-600 lg:ml-0">
-            Centurion University Admin Panel
-          </h1>
+
+          <div className="flex items-center ml-4 lg:ml-0">
+            <img
+              src="/logo.png"
+              alt="Centurion University Logo"
+              className="w-8 h-8 mr-2 object-contain"
+            />
+            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-900 to-blue-600">
+              Centurion University Career Admin Panel
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center space-x-4">
@@ -48,12 +74,16 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             onClick={toggleTheme}
             className="p-2 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
           >
-            {isDark ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+            {isDark ? (
+              <Moon className="w-5 h-5" />
+            ) : (
+              <Sun className="w-5 h-5" />
+            )}
           </button>
 
           {/* Notifications */}
           <div className="relative">
-            <button 
+            <button
               className="p-2 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
               onClick={() => setShowNotifications(!showNotifications)}
             >
@@ -69,9 +99,16 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                 </div>
                 <div className="max-h-64 overflow-y-auto">
                   {[1, 2, 3].map((_, i) => (
-                    <div key={i} className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors">
-                      <p className="text-sm font-medium text-gray-900">New application received</p>
-                      <p className="text-xs text-gray-500 mt-1">2 minutes ago</p>
+                    <div
+                      key={i}
+                      className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <p className="text-sm font-medium text-gray-900">
+                        New application received
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        2 minutes ago
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -87,11 +124,13 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           {/* Profile dropdown */}
           <div className="flex items-center group relative">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-blue-900 to-blue-700 text-white flex items-center justify-center transition-transform group-hover:scale-105">
-              <span className="font-semibold">AD</span>
+              <span className="font-semibold">{getInitials(user?.name)}</span>
             </div>
             <div className="ml-2 hidden md:block group-hover:text-blue-900 transition-colors">
-              <div className="text-sm font-semibold text-gray-700">Admin User</div>
-              <div className="text-xs text-gray-500">Administrator</div>
+              <div className="text-sm font-semibold text-gray-700">
+                {displayName}
+              </div>
+              <div className="text-xs text-gray-500">{displayRole}</div>
             </div>
           </div>
         </div>

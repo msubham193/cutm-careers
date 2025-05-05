@@ -3,13 +3,10 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { Card, CardHeader, CardBody, CardFooter } from "../../ui/Card";
 import Button from "../../ui/Button";
 import Badge from "../../ui/Badge";
-import {
-  jobApplications,
-  jobs,
-  interviews,
-  updateApplicationStatus,
-  updateInterview,
-} from "../../../../data/mockData";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { useUserStore } from "../../../../store/userStore";
+import { BASE_URL } from "../../../../utils/Constants";
 import {
   JobApplication,
   Job,
@@ -18,6 +15,7 @@ import {
   InterviewStatus,
   ModeOfInterview,
   InterviewResult,
+  UserApplicationResponse,
 } from "../../../../utils/types";
 import {
   Calendar,
@@ -31,20 +29,25 @@ import {
 const ApplicationDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { token } = useUserStore();
 
   const [application, setApplication] = useState<JobApplication | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [interview, setInterview] = useState<Interview | null>(null);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [newStatus, setNewStatus] = useState<ApplicationStatus>(
     ApplicationStatus.PENDING
   );
 
   // Interview form state
+  const [selectedInterview, setSelectedInterview] = useState<Interview | null>(
+    null
+  );
   const [interviewDate, setInterviewDate] = useState<string>("");
   const [interviewTime, setInterviewTime] = useState<string>("");
   const [interviewerName, setInterviewerName] = useState<string>("");
@@ -59,131 +62,363 @@ const ApplicationDetail: React.FC = () => {
     InterviewResult.SELECTED
   );
 
-  useEffect(() => {
-    if (id) {
-      const appId = parseInt(id);
-      const foundApp = jobApplications.find((a) => a.id === appId);
+  console.log(interviewResult);
 
-      if (foundApp) {
-        setApplication(foundApp);
-        setNewStatus(foundApp.status);
+  // Fetch application and interview data
+  const fetchApplicationData = async () => {
+    if (!id || isNaN(parseInt(id))) {
+      setError("Invalid application ID");
+      setLoading(false);
+      return;
+    }
 
-        // Get job details
-        const foundJob = jobs.find((j) => j.id === foundApp.jobId);
-        if (foundJob) {
-          setJob(foundJob);
-        }
+    setLoading(true);
+    setError(null);
 
-        // Get interview if exists
-        const foundInterview = interviews.find(
-          (i) => i.jobApplicationId === appId
-        );
-        if (foundInterview) {
-          setInterview(foundInterview);
+    try {
+      // Fetch application details
+      const appResponse = await axios.get(`${BASE_URL}/application/apd/${id}`, {
+        headers: { "x-access-token": token },
+      });
 
-          // Set interview form values from existing interview
-          const date = new Date(foundInterview.scheduledAt);
-          setInterviewDate(date.toISOString().split("T")[0]);
-          setInterviewTime(date.toISOString().split("T")[1].substring(0, 5));
-          setInterviewerName(foundInterview.interviewerName || "");
-          setInterviewerEmail(foundInterview.interviewerEmail || "");
-          setInterviewerPhone(foundInterview.interviewerPhone || "");
-          setInterviewMode(foundInterview.modeOfInterview);
-          if (foundInterview.interviewResult) {
-            setInterviewResult(foundInterview.interviewResult);
+      if (
+        appResponse.data.message === "fetched all Data" &&
+        appResponse.data.response
+      ) {
+        const { user, job, ...appData } = appResponse.data.response;
+        const mappedApp: JobApplication = {
+          id: appData.id,
+          jobId: appData.jobId,
+          applicantName: user.name,
+          applicantEmail: user.email,
+          applicantPhone: user.phoneNumber,
+          resumeURL: user.resumeUrl,
+          status: appData.status,
+          createdAt: appData.appliedAt,
+          updatedAt: appData.updatedAt,
+          userId: user.id,
+        };
+        setApplication(mappedApp);
+        setNewStatus(appData.status);
+        setJob(job);
+
+        // Fetch all interviews for the user
+        try {
+          const interviewResponse = await axios.get(
+            `${BASE_URL}/application/interview/user/${user.id}`,
+            {
+              headers: { "x-access-token": token },
+            }
+          );
+
+          if (
+            interviewResponse.data.message === "fetched all Data" &&
+            Array.isArray(interviewResponse.data.response)
+          ) {
+            const allApplications: UserApplicationResponse[] =
+              interviewResponse.data.response;
+            const targetApp = allApplications.find(
+              (app) => app.id === parseInt(id)
+            );
+
+            console.log(targetApp.Interview);
+            if (targetApp) {
+              setInterviews(targetApp.Interview || []);
+            } else {
+              toast.warn("Application not found in user interviews", {
+                position: "top-right",
+                autoClose: 5000,
+              });
+              setInterviews([]);
+            }
+          } else {
+            throw new Error("Unexpected interview response format");
           }
+        } catch (interviewError: any) {
+          console.error("Interview fetch error:", interviewError);
+          toast.warn("Failed to fetch interview details", {
+            position: "top-right",
+            autoClose: 5000,
+          });
+          setInterviews([]);
         }
       } else {
-        setError("Application not found");
+        throw new Error("Unexpected application response format");
       }
-
+    } catch (error: any) {
+      let errorMessage = "Failed to fetch application details";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+        if (error.response.status === 401) {
+          errorMessage = "Unauthorized. Please log in again.";
+        } else if (error.response.status === 404) {
+          errorMessage = "Application not found";
+        }
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
       setLoading(false);
     }
-  }, [id]);
+  };
 
-  const handleStatusChange = () => {
-    if (application) {
-      const updatedApp = updateApplicationStatus(application.id, newStatus);
-      setApplication(updatedApp);
-      setShowStatusModal(false);
+  // Update application status
+  const handleStatusChange = async () => {
+    if (!application || !job || !token) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.put(
+        `${BASE_URL}/application/change-status/${application.id}`,
+        {
+          applicationId: application.id,
+          status: newStatus,
+          jobTitle: job.title,
+        },
+        { headers: { "x-access-token": token } }
+      );
+
+      if (response.data.success === "ok" && response.data.response === true) {
+        setApplication({ ...application, status: newStatus });
+        toast.success("Application status updated successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setShowStatusModal(false);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to update application status";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleScheduleInterview = () => {
-    const scheduledAt = new Date(`${interviewDate}T${interviewTime}`);
-
-    // If interview exists, update it
-    if (interview) {
-      const updatedInterview = updateInterview(interview.id, {
-        scheduledAt: scheduledAt.toISOString(),
-        status: InterviewStatus.SCHEDULED,
-        interviewerName,
-        interviewerEmail,
-        interviewerPhone,
-        modeOfInterview: interviewMode,
+  // Schedule or reschedule interview
+  const handleScheduleInterview = async () => {
+    if (!application || !token || !interviewDate || !interviewTime) {
+      toast.error("Please fill in all required fields", {
+        position: "top-right",
+        autoClose: 5000,
       });
-      setInterview(updatedInterview);
+      return;
+    }
+
+    const scheduleDate = new Date(`${interviewDate}T${interviewTime}:00.000Z`);
+
+    try {
+      setLoading(true);
+      let response;
+      if (selectedInterview) {
+        // Reschedule existing interview
+        response = await axios.put(
+          `${BASE_URL}/api/interview/${selectedInterview.id}`,
+          {
+            interviewerName,
+            interviewerEmail,
+            interviewerPhone,
+            jobApplicationId: application.id,
+            modeOfInterview: interviewMode,
+            scheduledAt: scheduleDate.toISOString(),
+            status: InterviewStatus.SCHEDULED,
+          },
+          { headers: { "x-access-token": token } }
+        );
+      } else {
+        // Schedule new interview
+        response = await axios.post(
+          `${BASE_URL}/application/schedule-interview/cutm`,
+          {
+            interviewerName,
+            interviewerEmail,
+            interviewerPhone,
+            jobApplicationId: application.id,
+            modeOfInterview: interviewMode,
+            scheduleDate: scheduleDate.toISOString(),
+          },
+          { headers: { "x-access-token": token } }
+        );
+      }
+
+      if (response.data.success === "ok" && response.data.response) {
+        const updatedInterview: Interview = {
+          id: response.data.response.id,
+          jobApplicationId: response.data.response.jobApplicationId,
+          scheduledAt: response.data.response.scheduledAt,
+          status: response.data.response.status,
+          interviewerName: response.data.response.interviewerName,
+          interviewerEmail: response.data.response.interviewerEmail,
+          interviewerPhone: response.data.response.interviewerPhone,
+          modeOfInterview: response.data.response.modeOfInterview,
+          interviewResult: response.data.response.interviewResult,
+          createdAt: response.data.response.createdAt,
+          updatedAt: response.data.response.updatedAt,
+        };
+        setInterviews((prev) =>
+          selectedInterview
+            ? prev.map((int) =>
+                int.id === updatedInterview.id ? updatedInterview : int
+              )
+            : [...prev, updatedInterview]
+        );
+        setApplication({
+          ...application,
+          status:
+            response.data.response.jobApplication?.status || application.status,
+        });
+        setNewStatus(
+          response.data.response.jobApplication?.status || application.status
+        );
+        toast.success(
+          selectedInterview
+            ? "Interview rescheduled successfully!"
+            : "Interview scheduled successfully!",
+          {
+            position: "top-right",
+            autoClose: 3000,
+          }
+        );
+        setShowInterviewModal(false);
+        setSelectedInterview(null);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = selectedInterview
+        ? "Failed to reschedule interview"
+        : "Failed to schedule interview";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update interview result
+  const handleUpdateResult = async () => {
+    if (!selectedInterview || !token) return;
+
+    if (!showConfirmModal) {
+      setShowConfirmModal(true);
+      return;
+    }
+
+    console.log(InterviewStatus);
+    try {
+      setLoading(true);
+      const response = await axios.put(
+        `${BASE_URL}/application/interview-result/${selectedInterview.id}`,
+        {
+          status: interviewResult,
+        },
+        { headers: { "x-access-token": token } }
+      );
+
+      if (response.data.success === "ok" && response.data.response) {
+        const { updatedInterviewData, jobApplication } = response.data.response;
+        setInterviews((prev) =>
+          prev.map((int) =>
+            int.id === updatedInterviewData.id ? updatedInterviewData : int
+          )
+        );
+
+        setApplication((prev) =>
+          prev ? { ...prev, status: jobApplication.status } : prev
+        );
+        setNewStatus(jobApplication.status);
+
+        toast.success("Interview result updated successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setShowResultModal(false);
+        setShowConfirmModal(false);
+        setSelectedInterview(null);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (error: any) {
+      let errorMessage = "Failed to update interview result";
+      if (error.response) {
+        errorMessage = error.response.data?.message || errorMessage;
+      } else if (error.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open interview modal for scheduling or rescheduling
+  const openInterviewModal = (interview?: Interview) => {
+    setSelectedInterview(interview || null);
+    if (interview) {
+      const date = new Date(interview.scheduledAt);
+      setInterviewDate(date.toISOString().split("T")[0]);
+      setInterviewTime(date.toISOString().split("T")[1].substring(0, 5));
+      setInterviewerName(interview.interviewerName || "");
+      setInterviewerEmail(interview.interviewerEmail || "");
+      setInterviewerPhone(interview.interviewerPhone || "");
+      setInterviewMode(interview.modeOfInterview);
     } else {
-      // Create new interview
-      const newInterview: Interview = {
-        id: interviews.length + 1,
-        scheduledAt: scheduledAt.toISOString(),
-        status: InterviewStatus.SCHEDULED,
-        jobApplicationId: application!.id,
-        interviewerName,
-        interviewerEmail,
-        interviewerPhone,
-        modeOfInterview: interviewMode,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      interviews.push(newInterview);
-      setInterview(newInterview);
-
-      // Update application status
-      if (application) {
-        const updatedApp = updateApplicationStatus(
-          application.id,
-          ApplicationStatus.INTERVIEW_SCHEDULED
-        );
-        setApplication(updatedApp);
-        setNewStatus(ApplicationStatus.INTERVIEW_SCHEDULED);
-      }
+      setInterviewDate("");
+      setInterviewTime("");
+      setInterviewerName("");
+      setInterviewerEmail("");
+      setInterviewerPhone("");
+      setInterviewMode(ModeOfInterview.ONLINE);
     }
-
-    setShowInterviewModal(false);
+    setShowInterviewModal(true);
   };
 
-  const handleUpdateResult = () => {
-    if (interview) {
-      // Update interview result
-      const updatedInterview = updateInterview(interview.id, {
-        interviewResult,
-        status: InterviewStatus.COMPLETED,
-      });
-      setInterview(updatedInterview);
-
-      // Update application status based on result
-      if (application) {
-        let newAppStatus = application.status;
-
-        if (interviewResult === InterviewResult.SELECTED) {
-          newAppStatus = ApplicationStatus.ACCEPTED;
-        } else if (interviewResult === InterviewResult.REJECTED) {
-          newAppStatus = ApplicationStatus.REJECTED;
-        }
-
-        const updatedApp = updateApplicationStatus(
-          application.id,
-          newAppStatus
-        );
-        setApplication(updatedApp);
-        setNewStatus(newAppStatus);
-      }
-
-      setShowResultModal(false);
-    }
+  // Open result modal
+  const openResultModal = (interview: Interview) => {
+    setSelectedInterview(interview);
+    setInterviewResult(interview.interviewResult || InterviewResult.SELECTED);
+    setShowResultModal(true);
   };
+
+  useEffect(() => {
+    fetchApplicationData();
+  }, [id, token]);
 
   if (loading) {
     return (
@@ -217,6 +452,7 @@ const ApplicationDetail: React.FC = () => {
             variant="outline"
             icon={<Clock className="w-4 h-4" />}
             onClick={() => setShowStatusModal(true)}
+            disabled={loading}
           >
             Update Status
           </Button>
@@ -266,6 +502,7 @@ const ApplicationDetail: React.FC = () => {
                       onClick={() =>
                         window.open(application.resumeURL, "_blank")
                       }
+                      disabled={!application.resumeURL}
                     >
                       View Resume
                     </Button>
@@ -295,102 +532,113 @@ const ApplicationDetail: React.FC = () => {
               <h2 className="text-lg font-semibold text-gray-800">
                 Interview Information
               </h2>
-              {interview ? (
-                <div className="flex space-x-2">
-                  {interview.status !== InterviewStatus.COMPLETED && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowInterviewModal(true)}
-                    >
-                      Reschedule
-                    </Button>
-                  )}
-                  {interview.status === InterviewStatus.SCHEDULED && (
-                    <Button size="sm" onClick={() => setShowResultModal(true)}>
-                      Update Result
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  icon={<Calendar className="w-4 h-4" />}
-                  onClick={() => setShowInterviewModal(true)}
-                >
-                  Schedule Interview
-                </Button>
-              )}
+              <Button
+                size="sm"
+                icon={<Calendar className="w-4 h-4" />}
+                onClick={() => openInterviewModal()}
+                disabled={loading}
+              >
+                Schedule Interview
+              </Button>
             </CardHeader>
             <CardBody>
-              {interview ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Status
-                      </h3>
-                      <Badge type="interview" status={interview.status} />
-                    </div>
-                    {interview.interviewResult && (
-                      <div>
-                        <h3 className="text-sm font-medium text-gray-500">
-                          Result
-                        </h3>
-                        <Badge
-                          type="interviewResult"
-                          status={interview.interviewResult}
-                        />
+              {interviews.length > 0 ? (
+                <div className="space-y-6">
+                  {interviews.map((interview) => (
+                    <div
+                      key={interview.id}
+                      className="border border-gray-200 rounded-lg p-4 space-y-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">
+                            Status
+                          </h3>
+                          <Badge type="interview" status={interview.status} />
+                        </div>
+                        {interview.interviewResult && (
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-500">
+                              Result
+                            </h3>
+                            <Badge
+                              type="interviewResult"
+                              status={interview.interviewResult}
+                            />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Scheduled For
-                      </h3>
-                      <p className="mt-1 text-gray-900">
-                        {new Date(interview.scheduledAt).toLocaleString()}
-                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">
+                            Scheduled For
+                          </h3>
+                          <p className="mt-1 text-gray-900">
+                            {new Date(interview.scheduledAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">
+                            Mode
+                          </h3>
+                          <p className="mt-1">
+                            <Badge
+                              type="interviewMode"
+                              status={interview.modeOfInterview}
+                            />
+                          </p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">
+                            Interviewer
+                          </h3>
+                          <p className="mt-1 text-gray-900">
+                            {interview.interviewerName || "Not assigned"}
+                          </p>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">
+                            Interviewer Contact
+                          </h3>
+                          <p className="mt-1 text-gray-900">
+                            {interview.interviewerEmail &&
+                            interview.interviewerPhone
+                              ? `${interview.interviewerEmail} | ${interview.interviewerPhone}`
+                              : "Not available"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-2">
+                        {interview.status !== InterviewStatus.COMPLETED && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openInterviewModal(interview)}
+                            disabled={loading}
+                          >
+                            Reschedule
+                          </Button>
+                        )}
+                        {interview.status === InterviewStatus.SCHEDULED && (
+                          <Button
+                            size="sm"
+                            onClick={() => openResultModal(interview)}
+                            disabled={loading}
+                          >
+                            Update Result
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Mode
-                      </h3>
-                      <p className="mt-1">
-                        <Badge
-                          type="interviewMode"
-                          status={interview.modeOfInterview}
-                        />
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Interviewer
-                      </h3>
-                      <p className="mt-1 text-gray-900">
-                        {interview.interviewerName || "Not assigned"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Interviewer Contact
-                      </h3>
-                      <p className="mt-1 text-gray-900">
-                        {interview.interviewerEmail &&
-                        interview.interviewerPhone
-                          ? `${interview.interviewerEmail} | ${interview.interviewerPhone}`
-                          : "Not available"}
-                      </p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-6">
                   <Calendar className="w-12 h-12 mx-auto text-gray-400" />
                   <p className="mt-2 text-gray-500">
-                    No interview scheduled yet
+                    No interviews scheduled yet
                   </p>
                 </div>
               )}
@@ -467,6 +715,7 @@ const ApplicationDetail: React.FC = () => {
                       setNewStatus(ApplicationStatus.UNDER_REVIEW);
                       handleStatusChange();
                     }}
+                    disabled={loading}
                   >
                     Mark as Under Review
                   </Button>
@@ -475,17 +724,27 @@ const ApplicationDetail: React.FC = () => {
                 {application.status === ApplicationStatus.UNDER_REVIEW && (
                   <Button
                     className="w-full"
-                    onClick={() => setShowInterviewModal(true)}
+                    onClick={() => openInterviewModal()}
+                    disabled={loading}
                   >
                     Schedule Interview
                   </Button>
                 )}
 
                 {application.status === ApplicationStatus.INTERVIEW_SCHEDULED &&
-                  interview?.status === InterviewStatus.SCHEDULED && (
+                  interviews.some(
+                    (int) => int.status === InterviewStatus.SCHEDULED
+                  ) && (
                     <Button
                       className="w-full"
-                      onClick={() => setShowResultModal(true)}
+                      onClick={() =>
+                        openResultModal(
+                          interviews.find(
+                            (int) => int.status === InterviewStatus.SCHEDULED
+                          )!
+                        )
+                      }
+                      disabled={loading}
                     >
                       Update Interview Result
                     </Button>
@@ -502,6 +761,7 @@ const ApplicationDetail: React.FC = () => {
                         setNewStatus(ApplicationStatus.ACCEPTED);
                         handleStatusChange();
                       }}
+                      disabled={loading}
                     >
                       Accept Application
                     </Button>
@@ -514,6 +774,7 @@ const ApplicationDetail: React.FC = () => {
                         setNewStatus(ApplicationStatus.REJECTED);
                         handleStatusChange();
                       }}
+                      disabled={loading}
                     >
                       Reject Application
                     </Button>
@@ -557,6 +818,7 @@ const ApplicationDetail: React.FC = () => {
                       setNewStatus(e.target.value as ApplicationStatus)
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={loading}
                   >
                     {Object.values(ApplicationStatus).map((status) => (
                       <option key={status} value={status}>
@@ -571,10 +833,13 @@ const ApplicationDetail: React.FC = () => {
               <Button
                 variant="outline"
                 onClick={() => setShowStatusModal(false)}
+                disabled={loading}
               >
                 Cancel
               </Button>
-              <Button onClick={handleStatusChange}>Update Status</Button>
+              <Button onClick={handleStatusChange} disabled={loading}>
+                Update Status
+              </Button>
             </CardFooter>
           </Card>
         </div>
@@ -586,7 +851,9 @@ const ApplicationDetail: React.FC = () => {
           <Card className="w-full max-w-md">
             <CardHeader>
               <h2 className="text-lg font-semibold text-gray-800">
-                {interview ? "Reschedule Interview" : "Schedule Interview"}
+                {selectedInterview
+                  ? "Reschedule Interview"
+                  : "Schedule Interview"}
               </h2>
             </CardHeader>
             <CardBody>
@@ -606,6 +873,7 @@ const ApplicationDetail: React.FC = () => {
                       onChange={(e) => setInterviewDate(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
+                      disabled={loading}
                     />
                   </div>
 
@@ -623,6 +891,7 @@ const ApplicationDetail: React.FC = () => {
                       onChange={(e) => setInterviewTime(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -642,6 +911,7 @@ const ApplicationDetail: React.FC = () => {
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     required
+                    disabled={loading}
                   >
                     {Object.values(ModeOfInterview).map((mode) => (
                       <option key={mode} value={mode}>
@@ -664,6 +934,7 @@ const ApplicationDetail: React.FC = () => {
                     value={interviewerName}
                     onChange={(e) => setInterviewerName(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={loading}
                   />
                 </div>
 
@@ -680,6 +951,7 @@ const ApplicationDetail: React.FC = () => {
                     value={interviewerEmail}
                     onChange={(e) => setInterviewerEmail(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={loading}
                   />
                 </div>
 
@@ -696,6 +968,7 @@ const ApplicationDetail: React.FC = () => {
                     value={interviewerPhone}
                     onChange={(e) => setInterviewerPhone(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -703,12 +976,18 @@ const ApplicationDetail: React.FC = () => {
             <CardFooter className="flex justify-end space-x-3">
               <Button
                 variant="outline"
-                onClick={() => setShowInterviewModal(false)}
+                onClick={() => {
+                  setShowInterviewModal(false);
+                  setSelectedInterview(null);
+                }}
+                disabled={loading}
               >
                 Cancel
               </Button>
-              <Button onClick={handleScheduleInterview}>
-                {interview ? "Update Interview" : "Schedule Interview"}
+              <Button onClick={handleScheduleInterview} disabled={loading}>
+                {selectedInterview
+                  ? "Reschedule Interview"
+                  : "Schedule Interview"}
               </Button>
             </CardFooter>
           </Card>
@@ -741,6 +1020,7 @@ const ApplicationDetail: React.FC = () => {
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     required
+                    disabled={loading}
                   >
                     {Object.values(InterviewResult).map((result) => (
                       <option key={result} value={result}>
@@ -765,11 +1045,52 @@ const ApplicationDetail: React.FC = () => {
             <CardFooter className="flex justify-end space-x-3">
               <Button
                 variant="outline"
-                onClick={() => setShowResultModal(false)}
+                onClick={() => {
+                  setShowResultModal(false);
+                  setShowConfirmModal(false);
+                  setSelectedInterview(null);
+                }}
+                disabled={loading}
               >
                 Cancel
               </Button>
-              <Button onClick={handleUpdateResult}>Update Result</Button>
+              <Button onClick={handleUpdateResult} disabled={loading}>
+                Update Result
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Confirm Update
+              </h2>
+            </CardHeader>
+            <CardBody>
+              <p className="text-sm text-gray-600">
+                Do you want to update the interview result?
+              </p>
+            </CardBody>
+            <CardFooter className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setShowResultModal(false);
+                  setSelectedInterview(null);
+                }}
+                disabled={loading}
+              >
+                No
+              </Button>
+              <Button onClick={handleUpdateResult} disabled={loading}>
+                Yes
+              </Button>
             </CardFooter>
           </Card>
         </div>

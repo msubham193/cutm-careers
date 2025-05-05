@@ -26,7 +26,7 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition duration-300 transform hover:-translate-y-1">
       <div className="h-48 overflow-hidden">
         <img
-          src={job.imageUrl}
+          src={job.imageURL}
           alt={job.title}
           className="w-full h-full object-cover transition duration-300 transform hover:scale-105"
         />
@@ -72,7 +72,7 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
                 d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
-            <span>{job.location}</span>
+            <span>{job.campus}</span>
           </div>
           <div className="flex items-center text-gray-600">
             <svg
@@ -89,12 +89,12 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span>Deadline: {job.deadline}</span>
+            <span>Deadline: {job.applicationDeadline}</span>
           </div>
         </div>
         <div className="flex items-center justify-between">
           <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-            {job.type}
+            {job.jobType}
           </span>
           <button
             onClick={handleViewDetails}

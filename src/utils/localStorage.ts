@@ -12,7 +12,7 @@ export const getFromLocalStorage = <T>(key: string): T | null => {
 
   if (!itemStr) return null;
   const item = JSON.parse(itemStr);
-  console.log(item);
+
   const now = new Date();
   if (now.getTime() > item.expiry) {
     localStorage.removeItem(key);

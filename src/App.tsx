@@ -4,8 +4,13 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
+  useNavigate,
 } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
+import axios from "axios";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import Navbar from "./components/Navbar";
 import JobCard from "./components/JobCard";
 import JobDetails from "./components/JobDetails";
@@ -13,7 +18,6 @@ import JobsPage from "./components/JobsPage";
 import Footer from "./components/Footer";
 import LoginModal from "./components/LoginModal";
 import SignupModal from "./components/SignupModal";
-import AdminPanel from "./components/AdminPanel";
 import Layout from "./components/admin/layout/Layout";
 import Jobs from "./components/admin/pages/jobs/Jobs";
 import JobForm from "./components/admin/pages/jobs/JobForm";
@@ -22,82 +26,73 @@ import Applications from "./components/admin/pages/applications/Applications";
 import ApplicationDetail from "./components/admin/pages/applications/ApplicationDetail";
 import Interviews from "./components/admin/pages/interviews/Interviews";
 import Dashboard from "./components/admin/pages/Dashboard";
-import AdminRoot from "./components/admin/pages/AdminRoot";
 import { useUserStore } from "./store/userStore";
+import { BASE_URL } from "./utils/Constants";
+import MyApplications from "./components/MyApplications";
 
-function App() {
+interface Job {
+  id: number;
+  title: string;
+  department: string;
+  location: string;
+  type: string;
+  deadline: string;
+  imageUrl: string;
+}
+
+function AppContent() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { loadUserFromStorage } = useUserStore();
+  const location = useLocation();
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadUserFromStorage();
   }, [loadUserFromStorage]);
 
+  // Fetch jobs from the backend
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  const fetchJobs = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get(`${BASE_URL}/job`);
+      if (response.data.success === "ok") {
+        setJobs(response.data.response);
+      } else {
+        throw new Error("Unexpected response format");
+      }
+    } catch (err: any) {
+      let errorMessage = "Failed to fetch jobs";
+      if (err.response) {
+        errorMessage = err.response.data?.message || errorMessage;
+      } else if (err.request) {
+        errorMessage =
+          "Unable to reach the server. Please check your network or contact support.";
+      } else {
+        errorMessage = err.message || errorMessage;
+      }
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const toggleLoginModal = () => setIsLoginOpen(!isLoginOpen);
   const toggleSignupModal = () => setIsSignupOpen(!isSignupOpen);
 
-  const jobListings = [
-    {
-      id: 1,
-      title: "Junior Research Fellow (JRF)",
-      department: "Computer Science",
-      location: "Bhubaneswar Campus",
-      type: "Full-time",
-      deadline: "June 30, 2025",
-      imageUrl: "https://www.dbtjrf.gov.in/dbtJRFSlideshow/img3.jpg",
-    },
-    {
-      id: 2,
-      title: "Assistant Professor",
-      department: "Mechanical Engineering",
-      location: "Paralakhemundi Campus",
-      type: "Full-time",
-      deadline: "July 15, 2025",
-      imageUrl:
-        "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-    },
-    {
-      id: 3,
-      title: "Lab Assistant",
-      department: "Biotechnology",
-      location: "Vizianagaram Campus",
-      type: "Part-time",
-      deadline: "June 25, 2025",
-      imageUrl:
-        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR96mBvgDEAMplNeLH0iEyo6v8sUvbSyWhJ-Q&s",
-    },
-    {
-      id: 4,
-      title: "Research Associate",
-      department: "Physics",
-      location: "Bhubaneswar Campus",
-      type: "Full-time",
-      deadline: "July 20, 2025",
-      imageUrl:
-        "https://images.unsplash.com/photo-1532094349884-543bc11b234d?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-    },
-    {
-      id: 5,
-      title: "Teaching Assistant",
-      department: "Mathematics",
-      location: "Paralakhemundi Campus",
-      type: "Part-time",
-      deadline: "June 28, 2025",
-      imageUrl:
-        "https://images.unsplash.com/photo-1509062522246-3755977927d7?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-    },
-    {
-      id: 6,
-      title: "Senior Professor",
-      department: "Chemistry",
-      location: "Vizianagaram Campus",
-      type: "Full-time",
-      deadline: "July 10, 2025",
-      imageUrl:
-        "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
-    },
-  ];
+  const isAdminRoute = location.pathname.startsWith("/admin");
 
   const HomePage = () => (
     <>
@@ -113,7 +108,10 @@ function App() {
                 Discover exciting career opportunities and be part of our
                 mission to transform education
               </p>
-              <button className="bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-md transition duration-300 flex items-center mx-auto md:mx-0 animate-pulse">
+              <button
+                className="bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-md transition duration-300 flex items-center mx-auto md:mx-0 animate-pulse"
+                onClick={() => navigate("/jobs")}
+              >
                 Browse Openings <ChevronRight className="ml-2" size={20} />
               </button>
             </div>
@@ -143,11 +141,52 @@ function App() {
           Explore our current openings across departments
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {jobListings.map((job) => (
-            <JobCard key={job.id} job={job} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-64">
+            <svg
+              className="animate-spin h-8 w-8 text-blue-600"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8z"
+              />
+            </svg>
+          </div>
+        ) : error ? (
+          <div className="text-center text-red-600">
+            <p>{error}</p>
+            <button
+              onClick={() => {
+                setError(null);
+                setIsLoading(true);
+                fetchJobs();
+              }}
+              className="mt-4 text-blue-600 hover:text-blue-800"
+            >
+              Retry
+            </button>
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="text-center text-gray-600">
+            <p>No job openings available at the moment.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {jobs.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Why Join Us Section */}
@@ -243,69 +282,79 @@ function App() {
   );
 
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-50 flex flex-col font-poppins">
+    <div className="min-h-screen bg-gray-50 flex flex-col font-poppins">
+      <ToastContainer />
+      {!isAdminRoute && (
         <Navbar
           onLoginClick={toggleLoginModal}
           onSignupClick={toggleSignupModal}
         />
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<HomePage />} />
-          <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/job/:id" element={<JobDetails />} />
+      )}
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<HomePage />} />
+        <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/job/:id" element={<JobDetails />} />
+        <Route path="/my-applications/:id" element={<MyApplications />} />
 
-          {/* Admin Routes - All protected with the Layout component */}
-          <Route path="/admin" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="jobs" element={<Jobs />} />
-            <Route path="jobs/create" element={<JobForm />} />
-            <Route path="jobs/:id" element={<JobDetail />} />
-            <Route path="jobs/:id/edit" element={<JobForm />} />
+        {/* Admin Routes - All protected with the Layout component */}
+        <Route path="/admin" element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="jobs" element={<Jobs />} />
+          <Route path="jobs/create" element={<JobForm />} />
+          <Route path="jobs/:id" element={<JobDetail />} />
+          <Route path="jobs/:id/edit" element={<JobForm />} />
 
-            {/* Application Routes */}
-            <Route path="applications" element={<Applications />} />
-            <Route path="applications/:id" element={<ApplicationDetail />} />
+          {/* Application Routes */}
+          <Route path="applications" element={<Applications />} />
+          <Route path="applications/:id" element={<ApplicationDetail />} />
 
-            {/* Interview Routes */}
-            <Route path="interviews" element={<Interviews />} />
+          {/* Interview Routes */}
+          <Route path="interviews" element={<Interviews />} />
 
-            {/* Settings Route */}
-            <Route
-              path="settings"
-              element={<div className="p-4">Settings Page</div>}
-            />
-
-            {/* Fallback route for admin section */}
-            <Route path="*" element={<Navigate to="/admin" replace />} />
-          </Route>
-
-          {/* Global fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-
-        <Footer />
-
-        {isLoginOpen && (
-          <LoginModal
-            onClose={toggleLoginModal}
-            onSignupClick={() => {
-              toggleLoginModal();
-              toggleSignupModal();
-            }}
+          {/* Settings Route */}
+          <Route
+            path="settings"
+            element={<div className="p-4">Settings Page</div>}
           />
-        )}
 
-        {isSignupOpen && (
-          <SignupModal
-            onClose={toggleSignupModal}
-            onLoginClick={() => {
-              toggleSignupModal();
-              toggleLoginModal();
-            }}
-          />
-        )}
-      </div>
+          {/* Fallback route for admin section */}
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Route>
+
+        {/* Global fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      <Footer />
+
+      {isLoginOpen && (
+        <LoginModal
+          onClose={toggleLoginModal}
+          onSignupClick={() => {
+            toggleLoginModal();
+            toggleSignupModal();
+          }}
+        />
+      )}
+
+      {isSignupOpen && (
+        <SignupModal
+          onClose={toggleSignupModal}
+          onLoginClick={() => {
+            toggleSignupModal();
+            toggleLoginModal();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }

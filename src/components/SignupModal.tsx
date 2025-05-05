@@ -62,13 +62,29 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
   // Load form data from localStorage on mount
   useEffect(() => {
     const savedData = getFromLocalStorage<FormData>("signupForm");
+    console.log("Loaded from localStorage:", savedData); // Debug
     if (savedData) {
-      setFormData(savedData);
+      // Ensure education is an array
+      const validatedData = {
+        ...savedData,
+        education: Array.isArray(savedData.education)
+          ? savedData.education
+          : [
+              {
+                educationName: "",
+                timeLine: "",
+                Percentage: "",
+                InstituteName: "",
+              },
+            ],
+      };
+      setFormData(validatedData);
     }
   }, []);
 
   // Save form data to localStorage on change (1 hour TTL)
   useEffect(() => {
+    console.log("Saving to localStorage:", formData); // Debug
     saveToLocalStorage("signupForm", formData, 60 * 60 * 1000);
   }, [formData]);
 
@@ -132,22 +148,24 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
   };
 
   const isPersonalInfoValid = () => {
+    console.log("Validating personal info:", formData); // Debug
     return (
-      formData.name.trim() !== "" &&
-      formData.email.trim() !== "" &&
-      formData.password.trim() !== "" &&
-      formData.phoneNumber.trim() !== "" &&
-      formData.experience.trim() !== ""
+      formData.name?.trim() !== "" &&
+      formData.email?.trim() !== "" &&
+      formData.password?.trim() !== "" &&
+      formData.phoneNumber?.trim() !== "" &&
+      formData.experience?.trim() !== ""
     );
   };
 
   const isEducationValid = () => {
-    return formData.education.every(
+    console.log("Validating education:", formData.education); // Debug
+    return formData.education?.every(
       (edu) =>
-        edu.educationName.trim() !== "" &&
-        edu.timeLine.trim() !== "" &&
-        edu.Percentage.trim() !== "" &&
-        edu.InstituteName.trim() !== ""
+        edu.educationName?.trim() !== "" &&
+        edu.timeLine?.trim() !== "" &&
+        edu.Percentage?.trim() !== "" &&
+        edu.InstituteName?.trim() !== ""
     );
   };
 
@@ -176,7 +194,6 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // Check if the response indicates success
       if (response.data.success === "ok" && response.data.response.user) {
         const userData = {
           id: response.data.response.user.id,
@@ -190,18 +207,12 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
           updatedAt: response.data.response.user.updatedAt,
         };
 
-        // Store user data in Zustand
         setUser(userData);
-
-        // Save user data to localStorage (no TTL for user data)
         localStorage.setItem("user", JSON.stringify(userData));
-
-        // Clear form data from localStorage
         localStorage.removeItem("signupForm");
 
-        // Show success toast
         toast.success("Successfully signed up!", {
-          position: "top-right",
+          position: "bottom-center",
           autoClose: 3000,
         });
 
@@ -220,8 +231,8 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
         errorMessage = error.message || errorMessage;
       }
       toast.error(errorMessage, {
-        position: "top-right",
-        autoClose: 5000,
+        position: "bottom-center",
+        autoClose: 2000,
       });
     } finally {
       setIsLoading(false);
@@ -233,10 +244,12 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
   };
 
   const handleContinue = () => {
+    console.log("Continuing to step", step + 1); // Debug
     setStep(step + 1);
   };
 
   const handleBack = () => {
+    console.log("Going back to step", step - 1); // Debug
     setStep(step - 1);
   };
 
@@ -342,6 +355,9 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                   Step 3: Resume & Terms
                 </div>
               </div>
+
+              {/* Debug Step */}
+              {console.log("Current step:", step)}
 
               {/* Step 1: Personal Information */}
               {step === 1 && (
@@ -473,6 +489,9 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
               {/* Step 2: Education */}
               {step === 2 && (
                 <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Education Details
+                  </h3>
                   <EducationForm
                     education={formData.education}
                     onChange={handleEducationChange}
@@ -610,7 +629,7 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                     <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                       <path
                         fill="currentColor"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        d="M22.56 12.25c0-.78-.07-1.53-.20-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                       />
                       <path
                         fill="currentColor"
@@ -622,7 +641,7 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
                       />
                       <path
                         fill="currentColor"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.60 3.30-4.53 6.16-4.53z"
                       />
                     </svg>
                     Continue with Google
