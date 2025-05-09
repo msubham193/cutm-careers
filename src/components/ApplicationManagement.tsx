@@ -1,25 +1,53 @@
 "use client";
-
 import { useState } from "react";
 import {
-  Job,
+
   JobApplication,
   ApplicationStatus,
   ModeOfInterview,
   InterviewStatus,
 } from "../utils/types";
 
+const jobs = [
+  {
+    id: 1,
+    title: "Software Engineer",
+    description: "Develop and maintain software applications.",
+  },
+  {
+    id: 2,
+    title: "Product Manager",
+    description: "Oversee product development and strategy.",
+  },
+];
+
 let applications: JobApplication[] = [
   {
     id: 1,
     jobId: 1,
+    userId: 101, // Added userId property
     applicantName: "John Doe",
+    applicantEmail: "johndoe@example.com",
+    applicantPhone: "123-456-7890",
+    resumeURL: "https://example.com/resume/johndoe",
     status: ApplicationStatus.PENDING,
     submittedAt: new Date(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 
-let interviews: any[] = [];
+const interviews: {
+  id: number;
+  scheduledAt: Date;
+  interviewerName: string;
+  interviewerEmail: string;
+  interviewerPhone: string;
+  modeOfInterview: ModeOfInterview;
+  status: InterviewStatus;
+  jobApplicationId: number;
+  createdAt: Date;
+}[] = [];
 
 export default function ApplicationManagement() {
   const [showInterviewForm, setShowInterviewForm] = useState(false);

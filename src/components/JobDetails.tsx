@@ -42,11 +42,13 @@ const JobDetails: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to fetch job details";
+        axios.isAxiosError(err) && err.response?.data?.message
+          ? err.response.data.message
+          : err instanceof Error
+          ? err.message
+          : "Failed to fetch job details";
       setError(errorMessage);
       toast.error(errorMessage, {
         position: "top-right",
@@ -79,7 +81,7 @@ const JobDetails: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to fetch user applications:", err);
       // Silently fail to avoid disrupting the page
     }
@@ -125,11 +127,13 @@ const JobDetails: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to submit application";
+        axios.isAxiosError(err) && err.response?.data?.message
+          ? err.response.data.message
+          : err instanceof Error
+          ? err.message
+          : "Failed to submit application";
       toast.error(errorMessage, {
         position: "top-right",
         autoClose: 5000,

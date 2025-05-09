@@ -44,6 +44,7 @@ export interface Job {
   campus: string;
   salaryRange?: string;
   imageURL?: string;
+  location: string;
   jobType: JobType;
   status: JobStatus;
   adminId: number;
@@ -65,7 +66,10 @@ export interface JobApplication {
   createdAt: string;
   updatedAt: string;
   job?: Job;
+  
   interview?: Interview;
+  userId: number;
+  submittedAt: Date | null;
 }
 
 export interface Interview {
@@ -99,6 +103,7 @@ export interface DashboardMetrics {
 export interface JobApplicationWithDetails extends JobApplication {
   job: Job;
   user: User;
+  appliedAt: string;
 }
 
 export interface User {
@@ -151,4 +156,3 @@ export interface Application {
   userId: number;
   jobId: number;
 }
-

@@ -38,6 +38,9 @@ interface Job {
   type: string;
   deadline: string;
   imageUrl: string;
+  campus: string; // Added missing property
+  applicationDeadline: string; // Added missing property
+  imageURL: string; // Added missing property
 }
 
 function AppContent() {
@@ -69,14 +72,16 @@ function AppContent() {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       let errorMessage = "Failed to fetch jobs";
-      if (err.response) {
-        errorMessage = err.response.data?.message || errorMessage;
-      } else if (err.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      if (axios.isAxiosError(err)) {
+        if (err.response) {
+          errorMessage = err.response.data?.message || errorMessage;
+        } else if (err.request) {
+          errorMessage =
+            "Unable to reach the server. Please check your network or contact support.";
+        }
+      } else if (err instanceof Error) {
         errorMessage = err.message || errorMessage;
       }
       setError(errorMessage);

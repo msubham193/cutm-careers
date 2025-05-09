@@ -12,10 +12,13 @@ interface JobCardData {
   title: string;
   department: string;
   campus: string;
+  location: string;
   type: string;
   deadline: string;
   imageUrl: string;
+  imageURL: string;
   jobType: string;
+  applicationDeadline: string;
 }
 
 const JobsPage = () => {
@@ -55,8 +58,8 @@ const JobsPage = () => {
             (job: Job) => ({
               id: job.id,
               title: job.title,
-              department: job.department,
               campus: job.campus,
+              location: job.location,
               jobType: job.jobType.replace("_", " "),
               applicationDeadline: new Date(
                 job.applicationDeadline
@@ -75,9 +78,13 @@ const JobsPage = () => {
         } else {
           throw new Error("Unexpected response format");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         const errorMessage =
-          err.response?.data?.message || err.message || "Failed to fetch jobs";
+          axios.isAxiosError(err) && err.response?.data?.message
+            ? err.response.data.message
+            : err instanceof Error
+            ? err.message
+            : "Failed to fetch jobs";
         setError(errorMessage);
         toast.error(errorMessage, {
           position: "top-right",

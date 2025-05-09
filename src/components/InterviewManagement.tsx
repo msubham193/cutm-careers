@@ -13,8 +13,12 @@ let jobs: Job[] = [
     salaryRange: "5-7 LPA",
     jobType: JobType.FULL_TIME,
     status: JobStatus.ACTIVE,
-    createdAt: new Date(),
+    createdAt: new Date().toISOString(),
     adminId: 1,
+    location: "Bhubaneswar, Odisha",
+    Qualification: "B.Tech in Computer Science",
+    department: "Engineering",
+    applicationDeadline: new Date().toISOString(),
   },
 ];
 
@@ -91,8 +95,12 @@ function JobForm({ closeForm }: { closeForm: () => void }) {
       ...formData,
       companyName: "Centurion University",
       status: JobStatus.ACTIVE,
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
       adminId: 1,
+      location: "Default Location", // Replace with appropriate value
+      Qualification: "Default Qualification", // Replace with appropriate value
+      department: "Default Department", // Replace with appropriate value
+      applicationDeadline: new Date().toISOString(), // Replace with appropriate value if needed
     };
     jobs.push(newJob);
     closeForm();

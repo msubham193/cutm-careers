@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { Card, CardHeader, CardBody, CardFooter } from "../../ui/Card";
 import Button from "../../ui/Button";
 import Badge from "../../ui/Badge";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { toast } from "react-toastify";
 import { useUserStore } from "../../../../store/userStore";
 import { BASE_URL } from "../../../../utils/Constants";
@@ -26,6 +26,84 @@ import {
   ThumbsDown,
 } from "lucide-react";
 
+// Define API response interfaces
+interface ApplicationResponse {
+  message: string;
+  response: {
+    id: number;
+    jobId: number;
+    status: string;
+    appliedAt: string;
+    updatedAt: string;
+    submittedAt: string | null;
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      phoneNumber: string;
+      resumeUrl: string;
+    };
+    job: Job;
+  };
+}
+
+interface InterviewResponse {
+  message: string;
+  response: UserApplicationResponse[];
+}
+
+interface StatusUpdateResponse {
+  success: string;
+  response: boolean;
+}
+
+interface InterviewApiResponse {
+  success: string;
+  response: Interview & { jobApplication?: JobApplication };
+}
+
+interface InterviewResultResponse {
+  success: string;
+  response: { updatedInterviewData: Interview; jobApplication: JobApplication };
+}
+
+// Error response interface for Axios errors
+interface ErrorResponse {
+  message?: string;
+}
+
+// Centralized error handling
+const handleAxiosError = (error: AxiosError<ErrorResponse>): string => {
+  if (error.response) {
+    if (error.response.status === 401) {
+      return "Unauthorized. Please log in again.";
+    }
+    if (error.response.status === 404) {
+      return "Application not found";
+    }
+    return error.response.data?.message || "An error occurred";
+  }
+  if (error.request) {
+    return "Unable to reach the server. Please check your network or contact support.";
+  }
+  return error.message || "An unexpected error occurred";
+};
+
+// Enum validation
+const isValidApplicationStatus = (
+  status: string
+): status is ApplicationStatus =>
+  Object.values(ApplicationStatus).includes(status as ApplicationStatus);
+
+const isValidInterviewStatus = (status: string): status is InterviewStatus =>
+  Object.values(InterviewStatus).includes(status as InterviewStatus);
+
+const isValidModeOfInterview = (mode: string): mode is ModeOfInterview =>
+  Object.values(ModeOfInterview).includes(mode as ModeOfInterview);
+
+const isValidInterviewResult = (result: string): result is InterviewResult =>
+  Object.values(InterviewResult).includes(result as InterviewResult);
+
 const ApplicationDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -44,7 +122,6 @@ const ApplicationDetail: React.FC = () => {
     ApplicationStatus.PENDING
   );
 
-  // Interview form state
   const [selectedInterview, setSelectedInterview] = useState<Interview | null>(
     null
   );
@@ -56,13 +133,9 @@ const ApplicationDetail: React.FC = () => {
   const [interviewMode, setInterviewMode] = useState<ModeOfInterview>(
     ModeOfInterview.ONLINE
   );
-
-  // Interview result state
   const [interviewResult, setInterviewResult] = useState<InterviewResult>(
     InterviewResult.SELECTED
   );
-
-  console.log(interviewResult);
 
   // Fetch application and interview data
   const fetchApplicationData = async () => {
@@ -76,10 +149,10 @@ const ApplicationDetail: React.FC = () => {
     setError(null);
 
     try {
-      // Fetch application details
-      const appResponse = await axios.get(`${BASE_URL}/application/apd/${id}`, {
-        headers: { "x-access-token": token },
-      });
+      const appResponse = await axios.get<ApplicationResponse>(
+        `${BASE_URL}/application/apd/${id}`,
+        { headers: { "x-access-token": token } }
+      );
 
       if (
         appResponse.data.message === "fetched all Data" &&
@@ -93,78 +166,70 @@ const ApplicationDetail: React.FC = () => {
           applicantEmail: user.email,
           applicantPhone: user.phoneNumber,
           resumeURL: user.resumeUrl,
-          status: appData.status,
+          status: isValidApplicationStatus(appData.status)
+            ? appData.status
+            : ApplicationStatus.PENDING,
           createdAt: appData.appliedAt,
           updatedAt: appData.updatedAt,
+          submittedAt: appData.submittedAt ? new Date(appData.submittedAt) : null,
           userId: user.id,
         };
         setApplication(mappedApp);
-        setNewStatus(appData.status);
+        setNewStatus(mappedApp.status);
         setJob(job);
 
-        // Fetch all interviews for the user
         try {
-          const interviewResponse = await axios.get(
+          const interviewResponse = await axios.get<InterviewResponse>(
             `${BASE_URL}/application/interview/user/${user.id}`,
-            {
-              headers: { "x-access-token": token },
-            }
+            { headers: { "x-access-token": token } }
           );
 
           if (
             interviewResponse.data.message === "fetched all Data" &&
             Array.isArray(interviewResponse.data.response)
           ) {
-            const allApplications: UserApplicationResponse[] =
-              interviewResponse.data.response;
-            const targetApp = allApplications.find(
+            const targetApp = interviewResponse.data.response.find(
               (app) => app.id === parseInt(id)
             );
-
-            console.log(targetApp.Interview);
-            if (targetApp) {
-              setInterviews(targetApp.Interview || []);
-            } else {
+            setInterviews(
+              (targetApp?.Interview ?? []).map((int) => ({
+                ...int,
+                status: isValidInterviewStatus(int.status)
+                  ? int.status
+                  : InterviewStatus.SCHEDULED,
+                modeOfInterview: isValidModeOfInterview(int.modeOfInterview)
+                  ? int.modeOfInterview
+                  : ModeOfInterview.ONLINE,
+                interviewResult: int.interviewResult
+                  ? isValidInterviewResult(int.interviewResult)
+                    ? int.interviewResult
+                    : InterviewResult.SELECTED
+                  : undefined,
+              }))
+            );
+            if (!targetApp) {
               toast.warn("Application not found in user interviews", {
                 position: "top-right",
                 autoClose: 5000,
               });
-              setInterviews([]);
             }
           } else {
             throw new Error("Unexpected interview response format");
           }
-        } catch (interviewError: any) {
-          console.error("Interview fetch error:", interviewError);
-          toast.warn("Failed to fetch interview details", {
-            position: "top-right",
-            autoClose: 5000,
-          });
+        } catch (interviewError) {
+          const errorMessage = handleAxiosError(
+            interviewError as AxiosError<ErrorResponse>
+          );
+          toast.warn(errorMessage, { position: "top-right", autoClose: 5000 });
           setInterviews([]);
         }
       } else {
         throw new Error("Unexpected application response format");
       }
-    } catch (error: any) {
-      let errorMessage = "Failed to fetch application details";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-        if (error.response.status === 401) {
-          errorMessage = "Unauthorized. Please log in again.";
-        } else if (error.response.status === 404) {
-          errorMessage = "Application not found";
-        }
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
-        errorMessage = error.message || errorMessage;
-      }
+    } catch (error) {
+      const errorMessage = handleAxiosError(error as AxiosError<ErrorResponse>);
       setError(errorMessage);
-      toast.error(errorMessage, {
-        position: "top-right",
-        autoClose: 5000,
-      });
+      toast.error(errorMessage, { position: "top-right", autoClose: 5000 });
     } finally {
       setLoading(false);
     }
@@ -172,11 +237,17 @@ const ApplicationDetail: React.FC = () => {
 
   // Update application status
   const handleStatusChange = async () => {
-    if (!application || !job || !token) return;
+    if (!application || !job || !token) {
+      toast.error("Missing required data", {
+        position: "top-right",
+        autoClose: 5000,
+      });
+      return;
+    }
 
     try {
       setLoading(true);
-      const response = await axios.put(
+      const response = await axios.put<StatusUpdateResponse>(
         `${BASE_URL}/application/change-status/${application.id}`,
         {
           applicationId: application.id,
@@ -186,7 +257,7 @@ const ApplicationDetail: React.FC = () => {
         { headers: { "x-access-token": token } }
       );
 
-      if (response.data.success === "ok" && response.data.response === true) {
+      if (response.data.success === "ok" && response.data.response) {
         setApplication({ ...application, status: newStatus });
         toast.success("Application status updated successfully!", {
           position: "top-right",
@@ -196,20 +267,9 @@ const ApplicationDetail: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
-      let errorMessage = "Failed to update application status";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
-        errorMessage = error.message || errorMessage;
-      }
-      toast.error(errorMessage, {
-        position: "top-right",
-        autoClose: 5000,
-      });
+    } catch (error) {
+      const errorMessage = handleAxiosError(error as AxiosError<ErrorResponse>);
+      toast.error(errorMessage, { position: "top-right", autoClose: 5000 });
     } finally {
       setLoading(false);
     }
@@ -226,13 +286,19 @@ const ApplicationDetail: React.FC = () => {
     }
 
     const scheduleDate = new Date(`${interviewDate}T${interviewTime}:00.000Z`);
+    if (isNaN(scheduleDate.getTime())) {
+      toast.error("Invalid date or time", {
+        position: "top-right",
+        autoClose: 5000,
+      });
+      return;
+    }
 
     try {
       setLoading(true);
-      let response;
+      let response: { data: InterviewApiResponse };
       if (selectedInterview) {
-        // Reschedule existing interview
-        response = await axios.put(
+        response = await axios.put<InterviewApiResponse>(
           `${BASE_URL}/api/interview/${selectedInterview.id}`,
           {
             interviewerName,
@@ -246,8 +312,7 @@ const ApplicationDetail: React.FC = () => {
           { headers: { "x-access-token": token } }
         );
       } else {
-        // Schedule new interview
-        response = await axios.post(
+        response = await axios.post<InterviewApiResponse>(
           `${BASE_URL}/application/schedule-interview/cutm`,
           {
             interviewerName,
@@ -266,12 +331,22 @@ const ApplicationDetail: React.FC = () => {
           id: response.data.response.id,
           jobApplicationId: response.data.response.jobApplicationId,
           scheduledAt: response.data.response.scheduledAt,
-          status: response.data.response.status,
+          status: isValidInterviewStatus(response.data.response.status)
+            ? response.data.response.status
+            : InterviewStatus.SCHEDULED,
           interviewerName: response.data.response.interviewerName,
           interviewerEmail: response.data.response.interviewerEmail,
           interviewerPhone: response.data.response.interviewerPhone,
-          modeOfInterview: response.data.response.modeOfInterview,
-          interviewResult: response.data.response.interviewResult,
+          modeOfInterview: isValidModeOfInterview(
+            response.data.response.modeOfInterview
+          )
+            ? response.data.response.modeOfInterview
+            : ModeOfInterview.ONLINE,
+          interviewResult: response.data.response.interviewResult
+            ? isValidInterviewResult(response.data.response.interviewResult)
+              ? response.data.response.interviewResult
+              : InterviewResult.SELECTED
+            : undefined,
           createdAt: response.data.response.createdAt,
           updatedAt: response.data.response.updatedAt,
         };
@@ -304,22 +379,9 @@ const ApplicationDetail: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
-      let errorMessage = selectedInterview
-        ? "Failed to reschedule interview"
-        : "Failed to schedule interview";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
-        errorMessage = error.message || errorMessage;
-      }
-      toast.error(errorMessage, {
-        position: "top-right",
-        autoClose: 5000,
-      });
+    } catch (error) {
+      const errorMessage = handleAxiosError(error as AxiosError<ErrorResponse>);
+      toast.error(errorMessage, { position: "top-right", autoClose: 5000 });
     } finally {
       setLoading(false);
     }
@@ -327,21 +389,24 @@ const ApplicationDetail: React.FC = () => {
 
   // Update interview result
   const handleUpdateResult = async () => {
-    if (!selectedInterview || !token) return;
+    if (!selectedInterview || !token) {
+      toast.error("No interview selected", {
+        position: "top-right",
+        autoClose: 5000,
+      });
+      return;
+    }
 
     if (!showConfirmModal) {
       setShowConfirmModal(true);
       return;
     }
 
-    console.log(InterviewStatus);
     try {
       setLoading(true);
-      const response = await axios.put(
+      const response = await axios.put<InterviewResultResponse>(
         `${BASE_URL}/application/interview-result/${selectedInterview.id}`,
-        {
-          status: interviewResult,
-        },
+        { status: interviewResult },
         { headers: { "x-access-token": token } }
       );
 
@@ -352,12 +417,10 @@ const ApplicationDetail: React.FC = () => {
             int.id === updatedInterviewData.id ? updatedInterviewData : int
           )
         );
-
         setApplication((prev) =>
           prev ? { ...prev, status: jobApplication.status } : prev
         );
         setNewStatus(jobApplication.status);
-
         toast.success("Interview result updated successfully!", {
           position: "top-right",
           autoClose: 3000,
@@ -368,20 +431,9 @@ const ApplicationDetail: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
-      let errorMessage = "Failed to update interview result";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
-        errorMessage = error.message || errorMessage;
-      }
-      toast.error(errorMessage, {
-        position: "top-right",
-        autoClose: 5000,
-      });
+    } catch (error) {
+      const errorMessage = handleAxiosError(error as AxiosError<ErrorResponse>);
+      toast.error(errorMessage, { position: "top-right", autoClose: 5000 });
     } finally {
       setLoading(false);
     }
@@ -392,12 +444,21 @@ const ApplicationDetail: React.FC = () => {
     setSelectedInterview(interview || null);
     if (interview) {
       const date = new Date(interview.scheduledAt);
-      setInterviewDate(date.toISOString().split("T")[0]);
-      setInterviewTime(date.toISOString().split("T")[1].substring(0, 5));
+      if (!isNaN(date.getTime())) {
+        setInterviewDate(date.toISOString().split("T")[0]);
+        setInterviewTime(date.toISOString().split("T")[1].substring(0, 5));
+      } else {
+        setInterviewDate("");
+        setInterviewTime("");
+      }
       setInterviewerName(interview.interviewerName || "");
       setInterviewerEmail(interview.interviewerEmail || "");
       setInterviewerPhone(interview.interviewerPhone || "");
-      setInterviewMode(interview.modeOfInterview);
+      setInterviewMode(
+        isValidModeOfInterview(interview.modeOfInterview)
+          ? interview.modeOfInterview
+          : ModeOfInterview.ONLINE
+      );
     } else {
       setInterviewDate("");
       setInterviewTime("");
@@ -412,11 +473,21 @@ const ApplicationDetail: React.FC = () => {
   // Open result modal
   const openResultModal = (interview: Interview) => {
     setSelectedInterview(interview);
-    setInterviewResult(interview.interviewResult || InterviewResult.SELECTED);
+    setInterviewResult(
+      interview.interviewResult &&
+        isValidInterviewResult(interview.interviewResult)
+        ? interview.interviewResult
+        : InterviewResult.SELECTED
+    );
     setShowResultModal(true);
   };
 
   useEffect(() => {
+    if (!id) {
+      setError("Invalid application ID");
+      setLoading(false);
+      return;
+    }
     fetchApplicationData();
   }, [id, token]);
 
@@ -445,7 +516,7 @@ const ApplicationDetail: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">
-          Application: {application.applicantName}
+          Application: {application.applicantName ?? "Unknown"}
         </h1>
         <div className="flex space-x-3">
           <Button
@@ -500,6 +571,7 @@ const ApplicationDetail: React.FC = () => {
                       icon={<FileText className="w-4 h-4" />}
                       className="mt-1"
                       onClick={() =>
+                        application.resumeURL &&
                         window.open(application.resumeURL, "_blank")
                       }
                       disabled={!application.resumeURL}
@@ -737,13 +809,14 @@ const ApplicationDetail: React.FC = () => {
                   ) && (
                     <Button
                       className="w-full"
-                      onClick={() =>
-                        openResultModal(
-                          interviews.find(
-                            (int) => int.status === InterviewStatus.SCHEDULED
-                          )!
-                        )
-                      }
+                      onClick={() => {
+                        const scheduledInterview = interviews.find(
+                          (int) => int.status === InterviewStatus.SCHEDULED
+                        );
+                        if (scheduledInterview) {
+                          openResultModal(scheduledInterview);
+                        }
+                      }}
                       disabled={loading}
                     >
                       Update Interview Result
@@ -814,7 +887,7 @@ const ApplicationDetail: React.FC = () => {
                   <select
                     id="newStatus"
                     value={newStatus}
-                    onChange={(e) =>
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                       setNewStatus(e.target.value as ApplicationStatus)
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -870,7 +943,9 @@ const ApplicationDetail: React.FC = () => {
                       type="date"
                       id="interviewDate"
                       value={interviewDate}
-                      onChange={(e) => setInterviewDate(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setInterviewDate(e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
                       disabled={loading}
@@ -888,7 +963,9 @@ const ApplicationDetail: React.FC = () => {
                       type="time"
                       id="interviewTime"
                       value={interviewTime}
-                      onChange={(e) => setInterviewTime(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setInterviewTime(e.target.value)
+                      }
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
                       disabled={loading}
@@ -906,7 +983,7 @@ const ApplicationDetail: React.FC = () => {
                   <select
                     id="interviewMode"
                     value={interviewMode}
-                    onChange={(e) =>
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                       setInterviewMode(e.target.value as ModeOfInterview)
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -932,7 +1009,9 @@ const ApplicationDetail: React.FC = () => {
                     type="text"
                     id="interviewerName"
                     value={interviewerName}
-                    onChange={(e) => setInterviewerName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setInterviewerName(e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     disabled={loading}
                   />
@@ -949,7 +1028,9 @@ const ApplicationDetail: React.FC = () => {
                     type="email"
                     id="interviewerEmail"
                     value={interviewerEmail}
-                    onChange={(e) => setInterviewerEmail(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setInterviewerEmail(e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     disabled={loading}
                   />
@@ -966,7 +1047,9 @@ const ApplicationDetail: React.FC = () => {
                     type="tel"
                     id="interviewerPhone"
                     value={interviewerPhone}
-                    onChange={(e) => setInterviewerPhone(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setInterviewerPhone(e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     disabled={loading}
                   />
@@ -1015,7 +1098,7 @@ const ApplicationDetail: React.FC = () => {
                   <select
                     id="interviewResult"
                     value={interviewResult}
-                    onChange={(e) =>
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                       setInterviewResult(e.target.value as InterviewResult)
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"

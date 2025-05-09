@@ -11,7 +11,7 @@ import {
 import Button from "../../ui/Button";
 import Badge from "../../ui/Badge";
 import { Filter, Calendar, Search } from "lucide-react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { toast } from "react-toastify";
 import { useUserStore } from "../../../../store/userStore";
 import { BASE_URL } from "../../../../utils/Constants";
@@ -21,8 +21,43 @@ import {
   Job,
   JobApplication,
   Interview,
+  JobType,
+  ApplicationStatus,
+  InterviewResult,
+  JobStatus,
 } from "../../../../utils/types";
 
+// Define API response interfaces
+interface InterviewResponse {
+  message: string;
+  response: Interview[];
+}
+
+interface ApplicationResponse {
+  message: string;
+  response: {
+    id: number;
+    jobId: number;
+    status: string;
+    appliedAt: string;
+    updatedAt: string;
+    submittedAt: string | null;
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      phoneNumber: string;
+      resumeUrl: string;
+    };
+    job: Job & { location: string };
+  };
+}
+
+interface ErrorResponse {
+  message?: string;
+}
+
+// Interface for interview with details
 interface InterviewWithDetails {
   id: number;
   scheduledAt: string;
@@ -32,12 +67,31 @@ interface InterviewWithDetails {
   interviewerEmail?: string;
   interviewerPhone?: string;
   modeOfInterview: ModeOfInterview;
-  interviewResult?: string;
+  interviewResult?: InterviewResult;
   createdAt: string;
   updatedAt: string;
   jobApplication: JobApplication;
   job: Job;
 }
+
+// Enum validation
+const isValidInterviewStatus = (status: string): status is InterviewStatus =>
+  Object.values(InterviewStatus).includes(status as InterviewStatus);
+
+const isValidModeOfInterview = (mode: string): mode is ModeOfInterview =>
+  Object.values(ModeOfInterview).includes(mode as ModeOfInterview);
+
+const isValidJobType = (jobType: string): jobType is JobType =>
+  Object.values(JobType).includes(jobType as JobType);
+
+const isValidApplicationStatus = (status: string): status is ApplicationStatus =>
+  Object.values(ApplicationStatus).includes(status as ApplicationStatus);
+
+const isValidInterviewResult = (result: string): result is InterviewResult =>
+  Object.values(InterviewResult).includes(result as InterviewResult);
+
+const isValidJobStatus = (status: string): status is JobStatus =>
+  Object.values(JobStatus).includes(status as JobStatus);
 
 const Interviews: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,63 +102,144 @@ const Interviews: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { token } = useUserStore();
 
-  // Fetch interviews and job details
+  // Centralized error handling
+  const handleAxiosError = (error: AxiosError<ErrorResponse>): string => {
+    if (error.response) {
+      if (error.response.status === 401) {
+        return "Unauthorized. Please log in again.";
+      }
+      if (error.response.status === 404) {
+        return "Resource not found.";
+      }
+      return error.response.data?.message || "An error occurred";
+    }
+    if (error.request) {
+      return "Unable to reach the server. Please check your network or contact support.";
+    }
+    return error.message || "An unexpected error occurred";
+  };
+
+  // Fetch interviews and application details
   const fetchInterviews = async () => {
+    if (!token) {
+      setError("Please log in to view interviews");
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await axios.get(
+      const response = await axios.get<InterviewResponse>(
         `${BASE_URL}/application/interview/schedule`,
         {
           headers: { "x-access-token": token },
         }
       );
 
-      console.log(response.data.response);
       if (
         response.data.message === "ok" &&
         Array.isArray(response.data.response)
       ) {
         const interviewsData: Interview[] = response.data.response;
 
-        // Fetch job details for each interview
+        // Fetch application details for each interview
         const interviewsWithDetails: InterviewWithDetails[] = await Promise.all(
           interviewsData.map(async (interview) => {
             try {
-              const jobResponse = await axios.get(
-                `${BASE_URL}/job/${interview.jobApplication.jobId}`
+              const appResponse = await axios.get<ApplicationResponse>(
+                `${BASE_URL}/application/apd/${interview.jobApplicationId}`,
+                {
+                  headers: { "x-access-token": token },
+                }
               );
+
               if (
-                jobResponse.data.success === "ok" &&
-                jobResponse.data.response
+                appResponse.data.message === "fetched all Data" &&
+                appResponse.data.response
               ) {
+                const { user, job, ...appData } = appResponse.data.response;
+                const jobApplication: JobApplication = {
+                  id: appData.id,
+                  jobId: appData.jobId,
+                  userId: user.id,
+                  applicantName: user.name,
+                  applicantEmail: user.email,
+                  applicantPhone: user.phoneNumber,
+                  resumeURL: user.resumeUrl,
+                  status: isValidApplicationStatus(appData.status)
+                    ? appData.status
+                    : ApplicationStatus.PENDING,
+                  createdAt: appData.appliedAt,
+                  updatedAt: appData.updatedAt,
+                  submittedAt: appData.submittedAt ? new Date(appData.submittedAt) : null,
+                };
                 return {
                   ...interview,
-                  jobApplication: {
-                    ...interview.jobApplication,
-                    applicantName: "Unknown Applicant", // API doesn't provide name
-                    applicantEmail: "unknown@example.com", // API doesn't provide email
+                  status: isValidInterviewStatus(interview.status)
+                    ? interview.status
+                    : InterviewStatus.SCHEDULED,
+                  modeOfInterview: isValidModeOfInterview(
+                    interview.modeOfInterview
+                  )
+                    ? interview.modeOfInterview
+                    : ModeOfInterview.ONLINE,
+                  interviewResult: interview.interviewResult
+                    ? isValidInterviewResult(interview.interviewResult)
+                      ? interview.interviewResult
+                      : undefined
+                    : undefined,
+                  jobApplication,
+                  job: {
+                    ...job,
+                    jobType: isValidJobType(job.jobType)
+                      ? job.jobType
+                      : JobType.FULL_TIME,
+                    status: isValidJobStatus(job.status)
+                      ? job.status
+                      : JobStatus.ACTIVE,
+                    location: job.location ?? "Unknown",
                   },
-                  job: jobResponse.data.response,
                 };
               } else {
-                throw new Error("Unexpected job response format");
+                throw new Error("Unexpected application response format");
               }
-            } catch (jobError) {
+            } catch (appError) {
               console.error(
-                `Failed to fetch job ${interview.jobApplication.jobId}:`,
-                jobError
+                `Failed to fetch application ${interview.jobApplicationId}:`,
+                appError
               );
               return {
                 ...interview,
+                status: isValidInterviewStatus(interview.status)
+                  ? interview.status
+                  : InterviewStatus.SCHEDULED,
+                modeOfInterview: isValidModeOfInterview(
+                  interview.modeOfInterview
+                )
+                  ? interview.modeOfInterview
+                  : ModeOfInterview.ONLINE,
+                interviewResult: interview.interviewResult
+                  ? isValidInterviewResult(interview.interviewResult)
+                    ? interview.interviewResult
+                    : undefined
+                  : undefined,
                 jobApplication: {
-                  ...interview.jobApplication,
+                  id: interview.jobApplicationId,
+                  jobId: 0,
+                  userId: 0,
                   applicantName: "Unknown Applicant",
                   applicantEmail: "unknown@example.com",
+                  applicantPhone: "Unknown",
+                  resumeURL: "",
+                  status: ApplicationStatus.PENDING,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  submittedAt: null,
                 },
                 job: {
-                  id: interview.jobApplication.jobId,
+                  id: interview.jobApplicationId,
                   title: "Unknown Job",
                   campus: "Unknown Campus",
                   description: "",
@@ -115,6 +250,7 @@ const Interviews: React.FC = () => {
                   Qualification: "",
                   department: "",
                   applicationDeadline: new Date().toISOString(),
+                  location: "Unknown",
                 },
               };
             }
@@ -125,11 +261,8 @@ const Interviews: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to fetch interviews";
+    } catch (error) {
+      const errorMessage = handleAxiosError(error as AxiosError<ErrorResponse>);
       setError(errorMessage);
       toast.error(errorMessage, {
         position: "top-right",
@@ -141,12 +274,7 @@ const Interviews: React.FC = () => {
   };
 
   useEffect(() => {
-    if (token) {
-      fetchInterviews();
-    } else {
-      setError("Please log in to view interviews");
-      setIsLoading(false);
-    }
+    fetchInterviews();
   }, [token]);
 
   // Filter interviews
@@ -214,7 +342,9 @@ const Interviews: React.FC = () => {
                 className="pl-10 pr-4 py-2 w-full bg-white border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Search interviews..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setSearchTerm(e.target.value)
+                }
               />
             </div>
 
@@ -223,7 +353,7 @@ const Interviews: React.FC = () => {
                 <select
                   className="pl-3 pr-10 py-2 bg-white border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 appearance-none"
                   value={filterStatus}
-                  onChange={(e) =>
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                     setFilterStatus(e.target.value as InterviewStatus | "")
                   }
                 >
@@ -243,7 +373,7 @@ const Interviews: React.FC = () => {
                 <select
                   className="pl-3 pr-10 py-2 bg-white border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 appearance-none"
                   value={filterMode}
-                  onChange={(e) =>
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                     setFilterMode(e.target.value as ModeOfInterview | "")
                   }
                 >

@@ -1,10 +1,10 @@
-export const BASE_URL = "http://3.6.94.5:5000/api";
+export const BASE_URL = "https://backendcareer.cutm.ac.in/api";
 export const CAMPUSES = [
-    'Bhubaneswar',
-    'Paralakhemundi',
-    'Vizianagaram',
-    'Balasore',
-    'Chatrapur',
-    'Bolangir',
-    'Rayagada',
-  ];
+  "Bhubaneswar",
+  "Paralakhemundi",
+  "Vizianagaram",
+  "Balasore",
+  "Chatrapur",
+  "Bolangir",
+  "Rayagada",
+];

@@ -98,7 +98,10 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
     return () => clearInterval(interval);
   }, [campusImages.length]);
 
-  const handleInputChange = (field: keyof FormData, value: any) => {
+  const handleInputChange = (
+    field: keyof FormData,
+    value: string | boolean | File | Education[]
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -207,7 +210,7 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
           updatedAt: response.data.response.user.updatedAt,
         };
 
-        setUser(userData);
+        setUser(userData, response.data.response.token);
         localStorage.setItem("user", JSON.stringify(userData));
         localStorage.removeItem("signupForm");
 
@@ -220,14 +223,14 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to sign up";
-      if (error.response) {
+      if (axios.isAxiosError(error) && error.response) {
         errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
+      } else if (axios.isAxiosError(error) && error.request) {
         errorMessage =
           "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      } else if (error instanceof Error) {
         errorMessage = error.message || errorMessage;
       }
       toast.error(errorMessage, {
@@ -357,7 +360,10 @@ const SignupModal: React.FC<SignupModalProps> = ({ onClose, onLoginClick }) => {
               </div>
 
               {/* Debug Step */}
-              {console.log("Current step:", step)}
+              {(() => {
+                console.log("Current step:", step);
+                return null;
+              })()}
 
               {/* Step 1: Personal Information */}
               {step === 1 && (

@@ -47,20 +47,22 @@ const JobDetail: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to fetch job details";
-      if (error.response) {
+      if (axios.isAxiosError(error) && error.response) {
         errorMessage = error.response.data?.message || errorMessage;
         if (error.response.status === 401) {
           errorMessage = "Unauthorized. Please log in again.";
         } else if (error.response.status === 404) {
           errorMessage = "Job not found";
         }
-      } else if (error.request) {
+      } else if (axios.isAxiosError(error) && error.request) {
         errorMessage =
           "Unable to reach the server. Please check your network or contact support.";
       } else {
-        errorMessage = error.message || errorMessage;
+        if (error instanceof Error) {
+          errorMessage = error.message || errorMessage;
+        }
       }
       setError(errorMessage);
       toast.error(errorMessage, {
@@ -103,16 +105,18 @@ const JobDetail: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = `Failed to ${
         newStatus === JobStatus.ACTIVE ? "reopen" : "close"
       } job`;
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          errorMessage = error.response.data?.message || errorMessage;
+        } else if (error.request) {
+          errorMessage =
+            "Unable to reach the server. Please check your network or contact support.";
+        }
+      } else if (error instanceof Error) {
         errorMessage = error.message || errorMessage;
       }
       toast.error(errorMessage, {
@@ -145,14 +149,16 @@ const JobDetail: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to delete job";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          errorMessage = error.response.data?.message || errorMessage;
+        } else if (error.request) {
+          errorMessage =
+            "Unable to reach the server. Please check your network or contact support.";
+        }
+      } else if (error instanceof Error) {
         errorMessage = error.message || errorMessage;
       }
       toast.error(errorMessage, {
@@ -253,7 +259,7 @@ const JobDetail: React.FC = () => {
                     Created At
                   </h3>
                   <p className="text-gray-600">
-                    {new Date(job.createdAt).toLocaleDateString()}
+                    {job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "N/A"}
                   </p>
                 </div>
 
@@ -262,7 +268,7 @@ const JobDetail: React.FC = () => {
                     Last Updated
                   </h3>
                   <p className="text-gray-600">
-                    {new Date(job.updatedAt).toLocaleDateString()}
+                    {job.updatedAt ? new Date(job.updatedAt).toLocaleDateString() : "N/A"}
                   </p>
                 </div>
               </div>

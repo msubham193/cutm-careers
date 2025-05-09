@@ -11,7 +11,7 @@ import { useUserStore } from "../../../store/userStore";
 import { BASE_URL } from "../../../utils/Constants";
 import {
   JobApplicationWithDetails,
-  ApplicationStatus,
+
 } from "../../../utils/types";
 
 const Dashboard: React.FC = () => {
@@ -47,18 +47,20 @@ const Dashboard: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to fetch applications";
-      if (error.response) {
+      if (axios.isAxiosError(error) && error.response) {
         errorMessage = error.response.data?.message || errorMessage;
         if (error.response.status === 401) {
           errorMessage = "Unauthorized. Please log in again.";
         }
-      } else if (error.request) {
+      } else if (axios.isAxiosError(error) && error.request) {
         errorMessage =
           "Unable to reach the server. Please check your network or contact support.";
       } else {
-        errorMessage = error.message || errorMessage;
+        if (error instanceof Error) {
+          errorMessage = error.message || errorMessage;
+        }
       }
       setError(errorMessage);
       toast.error(errorMessage, {
@@ -203,7 +205,7 @@ const Dashboard: React.FC = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6">
+                      <TableCell className="text-center py-6 col-span-4">
                         <p className="text-gray-500">No applications found</p>
                       </TableCell>
                     </TableRow>

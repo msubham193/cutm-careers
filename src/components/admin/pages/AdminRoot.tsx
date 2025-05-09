@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate, Route, Router, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "../layout/Layout";
 import Dashboard from "./Dashboard";
 import Jobs from "./jobs/Jobs";

@@ -56,18 +56,20 @@ const Jobs: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to fetch jobs";
-      if (error.response) {
+      if (axios.isAxiosError(error) && error.response) {
         errorMessage = error.response.data?.message || errorMessage;
         if (error.response.status === 401) {
           errorMessage = "Unauthorized. Please log in again.";
         }
-      } else if (error.request) {
+      } else if (axios.isAxiosError(error) && error.request) {
         errorMessage =
           "Unable to reach the server. Please check your network or contact support.";
       } else {
-        errorMessage = error.message || errorMessage;
+        if (error instanceof Error) {
+          errorMessage = error.message || errorMessage;
+        }
       }
       setError(errorMessage);
       toast.error(errorMessage, {
@@ -253,7 +255,7 @@ const Jobs: React.FC = () => {
                       <Badge type="job" status={job.status} />
                     </TableCell>
                     <TableCell>
-                      {new Date(job.createdAt).toLocaleDateString()}
+                      {job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "N/A"}
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">

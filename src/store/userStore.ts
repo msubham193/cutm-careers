@@ -27,7 +27,7 @@ export const useUserStore = create<UserStore>((set) => ({
   setUser: (user, token) => set({ user, token }),
   clearUser: () => set({ user: null, token: null }),
   loadUserFromStorage: () => {
-    const storedUser = getFromLocalStorage("user");
+    const storedUser = getFromLocalStorage("user") as User;
     const storedToken = localStorage.getItem("token");
     if (storedUser && storedToken) {
       set({ user: storedUser, token: storedToken });

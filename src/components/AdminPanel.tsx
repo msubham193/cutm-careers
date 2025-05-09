@@ -1,6 +1,5 @@
 import { useState } from "react";
-import Link from "next/link";
-import { Job, JobApplication, Interview } from "../utils/types";
+
 import JobManagement from "./JobManagement";
 import ApplicationManagement from "./ApplicationManagement";
 import InterviewManagement from "./InterviewManagement";

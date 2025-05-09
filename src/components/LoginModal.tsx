@@ -73,14 +73,16 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to log in";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      if (axios.isAxiosError(error)) {
+        if (axios.isAxiosError(error) && error.response) {
+          errorMessage = error.response.data?.message || errorMessage;
+        } else if (axios.isAxiosError(error) && error.request) {
+          errorMessage =
+            "Unable to reach the server. Please check your network or contact support.";
+        }
+      } else if (error instanceof Error) {
         errorMessage = error.message || errorMessage;
       }
       toast.error(errorMessage, {
@@ -136,14 +138,16 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSignupClick }) => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to log in as admin";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          errorMessage = error.response.data?.message || errorMessage;
+        } else if (error.request) {
+          errorMessage =
+            "Unable to reach the server. Please check your network or contact support.";
+        }
+      } else if (error instanceof Error) {
         errorMessage = error.message || errorMessage;
       }
       toast.error(errorMessage, {

@@ -6,9 +6,11 @@ interface Job {
   title: string;
   department: string;
   location: string;
+  campus: string; // Added campus property
   type: string;
-  deadline: string;
+  applicationDeadline: string;
   imageUrl: string;
+  imageURL: string; // Added imageURL property
 }
 
 interface JobCardProps {
@@ -17,6 +19,8 @@ interface JobCardProps {
 
 const JobCard: React.FC<JobCardProps> = ({ job }) => {
   const navigate = useNavigate();
+
+  console.log(job);
 
   const handleViewDetails = () => {
     navigate(`/job/${job.id}`);
@@ -94,7 +98,7 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
         </div>
         <div className="flex items-center justify-between">
           <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-            {job.jobType}
+            {job.type}
           </span>
           <button
             onClick={handleViewDetails}

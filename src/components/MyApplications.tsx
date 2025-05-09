@@ -34,19 +34,21 @@ const MyApplications: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = "Failed to fetch applications";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-        if (error.response.status === 401) {
-          errorMessage = "Unauthorized. Please log in again.";
-        } else if (error.response.status === 404) {
-          errorMessage = "User not found";
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          errorMessage = error.response.data?.message || errorMessage;
+          if (error.response.status === 401) {
+            errorMessage = "Unauthorized. Please log in again.";
+          } else if (error.response.status === 404) {
+            errorMessage = "User not found";
+          }
+        } else if (error.request) {
+          errorMessage =
+            "Unable to reach the server. Please check your network or contact support.";
         }
-      } else if (error.request) {
-        errorMessage =
-          "Unable to reach the server. Please check your network or contact support.";
-      } else {
+      } else if (error instanceof Error) {
         errorMessage = error.message || errorMessage;
       }
       setError(errorMessage);
@@ -72,10 +74,12 @@ const MyApplications: React.FC = () => {
   console.log(applications);
   // Render status badge
   const renderStatusBadge = (status: ApplicationStatus) => {
-    const styles = {
+    const styles: Record<ApplicationStatus, string> = {
       PENDING: "bg-yellow-100 text-yellow-800",
       ACCEPTED: "bg-green-100 text-green-800",
       REJECTED: "bg-red-100 text-red-800",
+      UNDER_REVIEW: "bg-blue-100 text-blue-800",
+      INTERVIEW_SCHEDULED: "bg-purple-100 text-purple-800", // Added missing status
     };
     return (
       <span

@@ -197,25 +197,27 @@ const JobForm: React.FC = () => {
       } else {
         throw new Error("Unexpected response format");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = isEditing
         ? "Failed to update job"
         : "Failed to create job";
-      if (error.response?.data?.errors) {
+      if (axios.isAxiosError(error) && error.response?.data?.errors) {
         const validationErrors = error.response.data.errors
-          .map((err: any) => {
+          .map((err: { property: string; constraints?: Record<string, string> }) => {
             const constraints = Object.values(err.constraints || {}).join(", ");
             return `${err.property}: ${constraints}`;
           })
           .join("; ");
         errorMessage = validationErrors || errorMessage;
-      } else if (error.response?.data?.message) {
+      } else if (axios.isAxiosError(error) && error.response?.data?.message) {
         errorMessage = error.response.data.message;
-      } else if (error.request) {
+      } else if (axios.isAxiosError(error) && error.request) {
         errorMessage =
           "Unable to reach the server. Please check your network or contact support.";
       } else {
-        errorMessage = error.message || errorMessage;
+        if (error instanceof Error) {
+          errorMessage = error.message || errorMessage;
+        }
       }
       setError(errorMessage);
       toast.error(errorMessage, {
